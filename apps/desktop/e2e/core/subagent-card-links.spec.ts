@@ -93,7 +93,8 @@ async function backToParent(page: Page) {
   const mainTab = page.locator('[data-tree-tab="workspace"]').filter({ visible: true }).first()
 
   await expect(mainTab).toBeVisible({ timeout: 60_000 })
-  await mainTab.click()
+  // After a restart the connecting overlay covers the tab until the backend is up (waitForInteractive's budget).
+  await mainTab.click({ timeout: 180_000 })
 
   // The parent's sidebar title flips to "Untitled session" across a reload (live-audit L12): route by id.
   await page.evaluate(() => (location.hash = '#/'))
@@ -248,27 +249,56 @@ test('subagent cards and completion notices survive finish, reload and backend r
   const db = new DatabaseSync(path.join(sandbox.hermesHome, 'state.db'))
   db.exec(`UPDATE sessions SET model_config = json_remove(model_config, '$._subagent_id')
            WHERE source = 'subagent' AND json_valid(model_config)`)
-  db.exec(`UPDATE messages SET content = json_remove(content, '$.child_session_ids', '$.subagent_ids')
-           WHERE role = 'tool' AND tool_name = 'delegate_task' AND json_valid(content)`)
+
+  // Every locator a call result can carry: the dispatch arrays and each settled entry's own ids (beta's
+  // nested call to gamma stores them only per entry).
+  const results = db
+    .prepare(`SELECT id, content FROM messages WHERE role = 'tool' AND tool_name = 'delegate_task' AND json_valid(content)`)
+    .all() as { id: number; content: string }[]
+
+  const rewrite = db.prepare('UPDATE messages SET content = ? WHERE id = ?')
+
+  for (const row of results) {
+    const result = JSON.parse(row.content)
+    delete result.child_session_ids
+    delete result.subagent_ids
+
+    for (const entry of [...(result.results ?? []), ...(result.refused ?? [])]) {
+      delete entry.child_session_id
+      delete entry.subagent_id
+    }
+
+    rewrite.run(JSON.stringify(result), row.id)
+  }
 
   const stripped = db
     .prepare(
       `SELECT count(*) AS n FROM messages WHERE role = 'tool' AND tool_name = 'delegate_task'
-       AND (instr(content, 'child_session_ids') > 0 OR instr(content, 'subagent_ids') > 0)`
+       AND (instr(content, '"child_session_id') > 0 OR instr(content, '"subagent_id') > 0)`
     )
     .get() as { n: number }
 
   db.close()
+  expect(results.length).toBeGreaterThanOrEqual(2)
   expect(stripped.n).toBe(0)
   ;({ app, page } = await launchCoreApp(coreAppEnv(sandbox)))
 
   try {
+    const ws = recordWebSockets(page)
+    await page.reload()
     await backToParent(page)
     await waitForInteractive(app, page)
     await cardOpens(page, 'subagent alpha', CTX(11), '09-legacy-alpha')
     await backToParent(page)
+    const parentLocates = new Set(ws.sent.filter(m => m.method === 'subagent.locate').map(m => m.params?.session_id))
+    expect(parentLocates.size, 'the parent card located its children').toBeGreaterThan(0)
     await cardOpens(page, 'subagent beta', CTX(12), '10-legacy-beta')
     await cardOpens(page, 'grandchild gamma', CTX(13), '11-legacy-gamma-from-beta')
+    // Gamma opened through a locate asked of beta's own session: no stored id was left to open it by.
+    expect(
+      ws.sent.some(m => m.method === 'subagent.locate' && !parentLocates.has(m.params?.session_id)),
+      'nested subagent.locate from beta'
+    ).toBe(true)
   } finally {
     await app.close().catch(() => undefined)
   }
