@@ -74,8 +74,14 @@ class _ReadDB:
     def get_session_rich_row(self, sid):
         return self._hit(None)
 
+    def session_unread(self, row):
+        return self._hit(False)
+
     def get_compression_tip(self, root_id):
         return self._hit(None)
+
+    def _read_all(self, sql, params=()):  # the detail row's subagent projection
+        return self._hit([])
 
     def search_sessions_by_id(self, q, **_kw):
         return self._hit([{"id": "sess-1", "preview": "hello", "started_at": 1.0}])

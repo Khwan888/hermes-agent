@@ -18,7 +18,10 @@ from __future__ import annotations
 from pydantic import Field
 
 from .base import JsonValue, Payload, WireEnum
-from .common import MessageReaction, PlanGauge, SessionLiveInfo, SubagentRoute, SubagentStatus, SubagentUsage, ToolLabel, ToolLabelKind, Usage
+from .common import (
+    MessageReaction, PlanGauge, SessionLiveInfo, SubagentAttention, SubagentAttentionReason, SubagentExitReason, SubagentRoute,
+    SubagentStatus, SubagentUsage, ToolLabel, ToolLabelKind, Usage,
+)
 from .config_free_tier_control import FreeTierChallengePayload, SessionControlSnapshot
 from .registry import event
 
@@ -662,6 +665,13 @@ class SubagentEventPayload(Payload):
     summary: str | None = None
     duration_seconds: float | None = None
     tool_preview: str | None = None
+    #: ``subagent.complete`` only: how the child ended.
+    exit_reason: SubagentExitReason | None = None
+    #: Attention transition (a text-less ``subagent.progress``): the three keys appear together and only on a
+    #: transition; null means the flag cleared. ``attention_since`` is epoch seconds.
+    attention: SubagentAttention | None = None
+    attention_reason: SubagentAttentionReason | None = None
+    attention_since: float | None = None
 
 
 for _name, _doc in (

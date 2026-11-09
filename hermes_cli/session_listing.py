@@ -124,6 +124,65 @@ def annotate_subagent_counts(db: Any, sessions: list[dict[str, Any]]) -> None:
         counts.update((row['owner_id'], row['n']) for row in rows)
     for session in sessions:
         session['subagent_count'] = counts.get(session['id'], 0)
+    annotate_subagent_attention(db, [s for s in sessions if s['subagent_count']])
+
+
+# Stored end reasons of a subagent that ended on an existing limit (tools/delegate_tool_attention.py).
+_OVER_BUDGET_END_REASONS_SQL = "'subagent_max_iterations'"
+# Nesting is bounded by delegation.max_spawn_depth; the bound only stops a corrupt parent cycle.
+_ATTENTION_MAX_DEPTH = 8
+
+
+def _subagent_attention_sql(session_ids: list[str]) -> str:
+    """Per owner: unread subagents at ANY depth (each subagent's compression lineage is one subagent) and, among
+    them, those that ended over budget. ``subagent_id`` is the subagent root a lineage segment belongs to."""
+    from hermes_state_common import _sql_session_last_active
+
+    compression = _compression_edge_sql()
+    return f"""WITH RECURSIVE tree(owner_id, id, subagent_id, depth) AS (
+        SELECT id, id, '', 0 FROM sessions WHERE id IN ({','.join('?' for _ in session_ids)})
+        UNION
+        SELECT t.owner_id, parent.id, t.subagent_id, t.depth FROM tree t
+        JOIN sessions child ON child.id = t.id
+        JOIN sessions parent ON parent.id = child.parent_session_id
+        WHERE {compression}
+        UNION
+        SELECT t.owner_id, child.id, t.subagent_id, t.depth FROM tree t
+        JOIN sessions parent ON parent.id = t.id
+        JOIN sessions child ON child.parent_session_id = parent.id
+        WHERE {compression}
+        UNION
+        SELECT t.owner_id, child.id, child.id, t.depth + 1 FROM tree t
+        JOIN sessions parent ON parent.id = t.id
+        JOIN sessions child ON child.parent_session_id = parent.id
+        WHERE t.depth < {_ATTENTION_MAX_DEPTH} AND {_subagent_child_sql()}
+    ), subagent_state AS (
+        SELECT t.owner_id, t.subagent_id,
+               MAX(s.last_read_at IS NOT NULL AND {_sql_session_last_active('s')} > s.last_read_at) AS unread,
+               MAX(COALESCE(s.end_reason IN ({_OVER_BUDGET_END_REASONS_SQL}), 0)) AS over_budget
+        FROM tree t JOIN sessions s ON s.id = t.id
+        WHERE t.subagent_id != ''
+        GROUP BY t.owner_id, t.subagent_id
+    )
+    SELECT owner_id, SUM(unread) AS unread, SUM(unread AND over_budget) AS over_budget
+    FROM subagent_state GROUP BY owner_id"""
+
+
+def annotate_subagent_attention(db: Any, sessions: list[dict[str, Any]]) -> None:
+    """``subagent_attention: {unread, over_budget}`` over every descendant subagent (zeros when none need the human).
+    One batched query per page chunk; callers pass only rows that have subagents."""
+    from hermes_state_common import _id_chunks
+
+    rows = {}
+    for ids in _id_chunks([s['id'] for s in sessions]):
+        rows.update((row['owner_id'], dict(row)) for row in db._read_all(_subagent_attention_sql(ids), ids))
+    for session in sessions:
+        # Explicit zeros, not an absent key: clients merge list pages over cached rows, and an absent key
+        # would keep a roll-up the human already cleared.
+        row = rows.get(session['id']) or {}
+        session['subagent_attention'] = {'unread': row.get('unread') or 0, 'over_budget': row.get('over_budget') or 0}
+
+
 
 
 def query_session_subagents(db: Any, session_id: str, *, limit: int, offset: int) -> dict[str, Any]:
@@ -142,6 +201,7 @@ def query_session_subagents(db: Any, session_id: str, *, limit: int, offset: int
     annotate_subagent_counts(db, sessions)
     for session in sessions:
         session['unread'] = db.session_unread(session)
+        session['is_internal_child'] = True
     return dict(sessions=sessions, total=total, limit=limit, offset=offset,
                 has_more=offset + len(sessions) < total)
 

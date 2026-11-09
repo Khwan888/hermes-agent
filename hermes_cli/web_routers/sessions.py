@@ -609,6 +609,11 @@ async def get_session_detail(session_id: str, profile: Optional[str] = None):
         owned = cron_run_scheduler_owned(session, profile)
         if owned is not None:
             session["scheduler_owned"] = owned
+        # Same subagent projection as the list row, so re-reading one parent after opening a subagent is exact.
+        from hermes_cli.session_listing import annotate_subagent_counts
+
+        annotate_subagent_counts(db, [session])
+        session["unread"] = db.session_unread(db.get_session_rich_row(sid) or session)
         return session
 
     return await asyncio.to_thread(_with_db, profile, _detail, read_only=True)

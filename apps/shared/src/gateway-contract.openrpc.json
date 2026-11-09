@@ -43899,6 +43899,25 @@
         "title": "StreamDeltaPayload",
         "type": "object"
       },
+      "SubagentAttention": {
+        "description": "A running child that needs the human (``tools/delegate_tool_attention.py``): blocked on a prompt, or\nsilent past ``delegation.stuck_after_seconds`` with no running child of its own.",
+        "enum": [
+          "waiting",
+          "stuck"
+        ],
+        "title": "SubagentAttention",
+        "type": "string"
+      },
+      "SubagentAttentionReason": {
+        "description": "What a ``waiting`` child is blocked on (``tools/human_input_hooks.py`` kinds).",
+        "enum": [
+          "approval",
+          "sudo",
+          "clarify"
+        ],
+        "title": "SubagentAttentionReason",
+        "type": "string"
+      },
       "SubagentEventPayload": {
         "additionalProperties": false,
         "description": "``tool_progress._progress_subagent`` \u2014 every ``subagent.*`` frame; identity fields are optional\nbecause older emitters omit them and the TUI spawn tree falls back to flat rendering.",
@@ -44199,6 +44218,51 @@
             ],
             "default": null,
             "title": "Tool Preview"
+          },
+          "exit_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentExitReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentAttention"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "attention_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentAttentionReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "attention_since": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Attention Since"
           }
         },
         "required": [
@@ -44208,6 +44272,18 @@
         ],
         "title": "SubagentEventPayload",
         "type": "object"
+      },
+      "SubagentExitReason": {
+        "description": "How a child ended (``_run_single_child`` contract); only ``max_iterations`` means iteration-budget exhaustion.",
+        "enum": [
+          "completed",
+          "max_iterations",
+          "timeout",
+          "error",
+          "interrupted"
+        ],
+        "title": "SubagentExitReason",
+        "type": "string"
       },
       "SubagentIdParams": {
         "additionalProperties": false,
@@ -44395,6 +44471,24 @@
         "title": "SubagentOutputTailEntry",
         "type": "object"
       },
+      "SubagentRosterAttention": {
+        "additionalProperties": false,
+        "description": "Live children of this conversation's spawn tree (any depth) that need the human.",
+        "properties": {
+          "waiting": {
+            "default": 0,
+            "title": "Waiting",
+            "type": "integer"
+          },
+          "stuck": {
+            "default": 0,
+            "title": "Stuck",
+            "type": "integer"
+          }
+        },
+        "title": "SubagentRosterAttention",
+        "type": "object"
+      },
       "SubagentRosterEntry": {
         "additionalProperties": false,
         "properties": {
@@ -44411,6 +44505,17 @@
             "default": 0,
             "title": "Background",
             "type": "integer"
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentRosterAttention"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
@@ -44700,6 +44805,40 @@
             ],
             "default": null,
             "title": "Child Session Id"
+          },
+          "attention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentAttention"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "attention_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentAttentionReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "attention_since": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Attention Since"
           },
           "live_text": {
             "anyOf": [

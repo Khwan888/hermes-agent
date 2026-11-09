@@ -468,8 +468,11 @@ _SUBAGENT_FIELDS = (
     ("reasoning_tokens", _not_none, _int_or_skip), ("api_calls", _not_none, _int_or_skip),
     ("files_read", bool, _str_list), ("files_written", bool, _str_list), ("output_tail", bool, list),
     ("tool_name", bool, str), ("text", bool, str), ("status", bool, str), ("summary", bool, str),
-    ("duration_seconds", _not_none, float),
+    ("duration_seconds", _not_none, float), ("exit_reason", bool, str),
 )
+# Attention transitions (tools/delegate_tool_attention.py): present only on a transition frame, and a null
+# value IS the message (the flag cleared), so these pass through as given instead of being dropped when None.
+_SUBAGENT_ATTENTION_FIELDS = ("attention", "attention_reason", "attention_since")
 
 
 def _subagent_payload(event_type: str, name: str | None, preview, kw: dict, *, show_reasoning: bool) -> dict:
@@ -484,6 +487,7 @@ def _subagent_payload(event_type: str, name: str | None, preview, kw: dict, *, s
             val = coerce(source[key])
             if val is not None:
                 payload[key] = val
+    payload.update({key: kw[key] for key in _SUBAGENT_ATTENTION_FIELDS if key in kw})
     # subagent.thinking's text is the child's chain of thought: with reasoning hidden the
     # delegate card must not leak it, same policy as the child-mirror's reasoning.delta.
     if event_type == "subagent.thinking" and not show_reasoning:

@@ -201,6 +201,17 @@ def _get_child_timeout() -> Optional[float]:
         "delegation.child_timeout_seconds=%r is not a valid number; using default (no timeout)",
     )
 
+DEFAULT_STUCK_AFTER_SECONDS = 300.0
+
+def _get_stuck_after_seconds() -> float:
+    """Seconds without an own event before the Desktop displays "No progress" (0 disables).
+    This is an observation, not proof that a subagent is stuck or hung. It never stops work.
+    """
+    return _knob(
+        "stuck_after_seconds", None, lambda v: max(0.0, float(v)), DEFAULT_STUCK_AFTER_SECONDS,
+        "delegation.stuck_after_seconds=%r is not a number; using default 300",
+    )
+
 def _get_max_spawn_depth() -> int:
     """delegation.max_spawn_depth floored at 1 (no ceiling). Depth 0 is the parent; agents at depths 0..N-1 may spawn,
     depth N is the leaf floor. Default 1 is flat. Each extra level multiplies API cost."""

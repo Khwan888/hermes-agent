@@ -57,6 +57,27 @@ def _fire(hook_name: str, payload: dict) -> None:
         logger.debug("%s dispatch failed", hook_name, exc_info=True)
 
 
+def _subagent_wait_begin(kind: str) -> str | None:
+    """Inside a delegated child, flag its live record ``waiting`` (the human sees which subagent needs them);
+    returns its subagent_id, None elsewhere."""
+    try:
+        from tools.delegate_tool_attention import mark_waiting
+        return mark_waiting(kind)
+    except Exception:  # a subagent flag must never take the human prompt down with it
+        logger.debug("human-input subagent attention flag failed", exc_info=True)
+        return None
+
+
+def _subagent_wait_end(subagent_id: str | None) -> None:
+    if subagent_id is None:
+        return
+    try:
+        from tools.delegate_tool_attention import clear_waiting
+        clear_waiting(subagent_id)
+    except Exception:  # a subagent flag must never take the human prompt down with it
+        logger.debug("human-input subagent attention clear failed", exc_info=True)
+
+
 @contextlib.contextmanager
 def human_input_request(kind: str, *, prompt: str = "", session_key: str | None = None, **extra):
     """Fire the request hook, run the block (the human wait), then fire the resolved hook.
@@ -66,7 +87,9 @@ def human_input_request(kind: str, *, prompt: str = "", session_key: str | None 
         payload["session_key"] = session_key
     request = HumanInputRequest(payload["request_id"])
     _fire("on_human_input_request", payload)
+    waiting = _subagent_wait_begin(kind)
     try:
         yield request
     finally:
+        _subagent_wait_end(waiting)
         _fire("on_human_input_resolved", {**payload, "outcome": str(request.outcome or "error")})

@@ -426,6 +426,22 @@ provider from a runaway), and `timeout_phase`
 (`before_first_llm_call` when the child never reached its first request,
 `after_llm_calls` otherwise). All four are `null` on non-timeout errors.
 
+## Subagents That Need You
+
+The desktop app reuses session indicators for subagents needing attention:
+
+- **Waiting on you** — the child is blocked on dangerous-command approval or a sudo password.
+- **No progress** — the child has emitted no tool start, thinking, progress, or streamed text for `delegation.stuck_after_seconds`, and has no running child of its own. This means only that no progress was observed, not that the child is stuck or hung. Its next event clears the flag. Waiting for a human does not count as inactivity.
+- **Iteration budget reached** — the child finished with `exit_reason: max_iterations`; its stored session records `subagent_max_iterations`. This is an iteration limit, not a cost limit. A timeout is not classified as iteration-budget exhaustion.
+- **Unread** — the child finished (except a deliberate stop) and you have not opened its session yet. Opening one child clears only its unread state and refreshes ancestor counts, not its siblings.
+
+```yaml
+delegation:
+  stuck_after_seconds: 300   # default; 0 disables no-progress indicators
+```
+
+The no-progress threshold is configurable and only raises an indicator. It does not stop work or change the existing heartbeat/timeout safeguards. A slow but healthy model or tool may legitimately emit no progress for this long.
+
 ## Failure Visibility
 
 A subagent that fails — non-retryable provider error (404/400), timeout, crash, or no usable output — is never silent:

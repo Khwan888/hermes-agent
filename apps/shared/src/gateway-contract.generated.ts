@@ -2461,6 +2461,9 @@ export interface SubagentSnapshot {
   last_tool?: string | null
   accepting_steer?: boolean | null
   child_session_id?: string | null
+  attention?: SubagentAttention | null
+  attention_reason?: SubagentAttentionReason | null
+  attention_since?: number | null
   live_text?: string | null
   duration_seconds?: number | null
 }
@@ -2489,6 +2492,10 @@ export interface SubagentUsage {
 }
 /** Lifecycle of one delegated child (``tools/delegate_tool_child_run.py``); ``failed`` / ``error`` / ``timeout`` / ``interrupted`` / ``completed`` are terminal. */
 export type SubagentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'error' | 'timeout' | 'interrupted'
+/** A running child that needs the human (``tools/delegate_tool_attention.py``): blocked on a prompt, or silent past ``delegation.stuck_after_seconds`` with no running child of its own. */
+export type SubagentAttention = 'waiting' | 'stuck'
+/** What a ``waiting`` child is blocked on (``tools/human_input_hooks.py`` kinds). */
+export type SubagentAttentionReason = 'approval' | 'sudo' | 'clarify'
 /** ``delegations``: recently failed async delegation tasks for the session (durable store), newest first. */
 export interface SubagentListResult {
   subagents?: SubagentSnapshot[]
@@ -2511,6 +2518,12 @@ export interface SubagentRosterEntry {
   session_id: string
   subagents?: number
   background?: number
+  attention?: SubagentRosterAttention | null
+}
+/** Live children of this conversation's spawn tree (any depth) that need the human. */
+export interface SubagentRosterAttention {
+  waiting?: number
+  stuck?: number
 }
 export interface SubagentIdParams {
   session_id: string
@@ -6207,6 +6220,10 @@ export interface SubagentEventPayload {
   summary?: string | null
   duration_seconds?: number | null
   tool_preview?: string | null
+  exit_reason?: SubagentExitReason | null
+  attention?: SubagentAttention | null
+  attention_reason?: SubagentAttentionReason | null
+  attention_since?: number | null
 }
 /** ``tools/delegate_tool_results.py::_extract_output_tail`` row. */
 export interface SubagentOutputTailEntry {
@@ -6214,6 +6231,8 @@ export interface SubagentOutputTailEntry {
   preview: string
   is_error: boolean
 }
+/** How a child ended (``_run_single_child`` contract); only ``max_iterations`` means iteration-budget exhaustion. */
+export type SubagentExitReason = 'completed' | 'max_iterations' | 'timeout' | 'error' | 'interrupted'
 /** ``tool_progress._progress_moa_reference``. */
 export interface MoaReferencePayload {
   label: string

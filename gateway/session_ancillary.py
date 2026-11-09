@@ -17,6 +17,7 @@ from hermes_state_runtime import RuntimeStoreError
 _SUBAGENT_FIELDS = (
     'subagent_id', 'parent_id', 'depth', 'goal', 'delegation_id', 'model',
     'started_at', 'status', 'tool_count', 'last_tool', 'accepting_steer',
+    'attention', 'attention_reason', 'attention_since',
 )
 _TAIL_BYTES = 16384
 _PROCESS_TAIL_CHARS = 32768  # main's dock tail view (cli_process_dock.process_tail)

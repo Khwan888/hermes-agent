@@ -220,6 +220,32 @@ class TranscriptMessage(OpenModel):
     reasoning: str | None = None
 
 
+class SubagentAttention(WireEnum):
+    """A running child that needs the human (``tools/delegate_tool_attention.py``): blocked on a prompt, or
+    silent past ``delegation.stuck_after_seconds`` with no running child of its own."""
+
+    waiting = "waiting"
+    stuck = "stuck"
+
+
+class SubagentAttentionReason(WireEnum):
+    """What a ``waiting`` child is blocked on (``tools/human_input_hooks.py`` kinds)."""
+
+    approval = "approval"
+    sudo = "sudo"
+    clarify = "clarify"
+
+
+class SubagentExitReason(WireEnum):
+    """How a child ended (``_run_single_child`` contract); only ``max_iterations`` means iteration-budget exhaustion."""
+
+    completed = "completed"
+    max_iterations = "max_iterations"
+    timeout = "timeout"
+    error = "error"
+    interrupted = "interrupted"
+
+
 class SubagentStatus(WireEnum):
     """Lifecycle of one delegated child (``tools/delegate_tool_child_run.py``); ``failed`` /
     ``error`` / ``timeout`` / ``interrupted`` / ``completed`` are terminal."""

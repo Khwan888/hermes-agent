@@ -139,6 +139,14 @@ def _live_work_owners():
     return owners
 
 
+def _live_attention_owners():
+    """``(waiting|stuck, owner candidates)`` for every flagged live child at any depth, owned by the
+    conversation of its depth-0 ancestor (a grandchild's flag lights the conversation that spawned the tree)."""
+    from tools.delegate_tool_attention import live_attention_owners
+
+    return [(attention, (owner, "")) for attention, owner in live_attention_owners()]
+
+
 def _route_namespaces(profile_home):
     """Session-key namespaces (the ``agent:<ns>`` segment) a route of the requested profile can carry.
     Multiplexed routes are namespaced per profile; ``agent:main`` is also every unmultiplexed and legacy
@@ -184,6 +192,7 @@ def _(rid, params):
         if home := connection_profile_home():
             scope = {"profile": Path(home).name}
     counts = {}
+    attention = {}
     namespaces = _route_namespaces(_profile_home(scope.get("profile")))
     with _profile_db(scope) as db:
         if db is None:
@@ -191,6 +200,11 @@ def _(rid, params):
         for kind, owner_ids in owners:
             if sid := _stored_owner(db, owner_ids, namespaces):
                 counts.setdefault(sid, {"subagents": 0, "background": 0})[kind] += 1
+        for kind, owner_ids in _live_attention_owners():
+            if sid := _stored_owner(db, owner_ids, namespaces):
+                attention.setdefault(sid, {"waiting": 0, "stuck": 0})[kind] += 1
+    for sid, flags in attention.items():
+        counts.setdefault(sid, {"subagents": 0, "background": 0})["attention"] = flags
     return _ok(rid, {"sessions": [{"session_id": sid, **c} for sid, c in counts.items()]})
 
 

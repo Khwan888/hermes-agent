@@ -3186,6 +3186,7 @@ delegation:
   max_spawn_depth: 1                        # Delegation tree depth cap (1-3, clamped). 1 = flat (default): parent spawns leaves that cannot delegate. 2 = orchestrator children can spawn leaf grandchildren. 3 = three levels.
   orchestrator_enabled: true                # Global kill switch. When false, role="orchestrator" is ignored and every child is forced to leaf regardless of max_spawn_depth.
   oneshot_max_children: 2                   # Total subagents a one-shot run (hermes chat -q / --oneshot) may spawn; 0 = unlimited. Interactive and gateway sessions are never capped by this.
+  stuck_after_seconds: 300                  # Show "No progress" after this many seconds without an own event; 0 disables. Indicator only, never stops work.
   gateway_mode: auto                        # Gateway sessions: auto | inline | background. auto = join children inside the turn (one answer) on a messaging chat whose display.interim_assistant_messages is off. See Subagent Delegation → Messaging chats without interim messages.
 ```
 

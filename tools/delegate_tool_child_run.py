@@ -16,6 +16,7 @@ from agent.compression_marker import elide
 from agent.interrupt_compat import request_hard_interrupt
 from dataclasses import dataclass, field
 from tools import file_state
+from tools.delegate_tool_attention import persist_terminal_attention
 from tools.delegate_tool_progress import _quiet, _safe_progress
 from tools.delegate_tool_registry import (
     _capture_gateway_steer_authority, _close_subagent_steering, _register_subagent, _unregister_subagent,
@@ -446,6 +447,8 @@ def _register_child(
         "started_at": time.time(), "status": "running", "tool_count": 0, "agent": child,
         # Keep an already-open page tied to this run when compression rotates its session.
         "child_origin_session_id": _str_or_none(getattr(child, "session_id", None)),
+        # Live "needs you" flag (tools/delegate_tool_attention.py): waiting | stuck | None.
+        "attention": None, "attention_reason": None, "attention_since": None,
         # Owning conversation's durable session id (same lineage completion delivery routes by), sourced from the
         # child's stamp so it survives a parent_agent rebuild between dispatch and run; used for list/steer/stop
         # ownership when the weakref chain breaks.
@@ -801,6 +804,7 @@ class _ChildRun:
     subagent_id: Optional[str]
     child_progress_cb: Any
     heartbeat: Any = None
+    stuck_watch: Any = None  # tools/delegate_tool_attention.StuckWatch, started beside the heartbeat
     child_start: float = field(default_factory=time.monotonic)
     worktree_info: Optional[dict[str, str]] = None
     child_task_id: str = ""
@@ -866,11 +870,14 @@ class _ChildRun:
     def finish_failed(
         self, entry: dict[str, Any], late_steer: Optional[str], *, preview: str, summary: str = "", status: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Shared tail of every failure path: emit ``subagent.complete`` (``status`` defaults to the entry's), note
-        the steer text that won the race with the failure, report the worktree."""
+        """Shared tail of every failure path: persist the finished-unread mark, emit ``subagent.complete``
+        (``status`` defaults to the entry's), note the steer text that won the race with the failure, report the
+        worktree."""
+        exit_reason = entry.get("exit_reason") or "error"
+        persist_terminal_attention(self.child, entry["status"], exit_reason)
         _safe_progress(
             self.child_progress_cb, "subagent.complete", preview=redact_child_text(preview, force=False), status=status or entry["status"],
-            duration_seconds=entry["duration_seconds"],
+            duration_seconds=entry["duration_seconds"], exit_reason=exit_reason,
             summary=redact_child_text(summary, force=False) if summary is not None else None,
         )
         _append_missed_steer(entry, late_steer)
@@ -1105,7 +1112,9 @@ class _ChildRun:
 
     def emit_complete(self, result: dict[str, Any], entry: dict[str, Any], duration: float) -> None:
         """Fire ``subagent.complete`` with the per-branch observability payload (tokens, cost, files touched,
-        tool-output tail); every field is optional and degrades gracefully on the client."""
+        tool-output tail); every field is optional and degrades gracefully on the client. The finished-unread mark
+        is persisted first, with or without a progress listener."""
+        persist_terminal_attention(self.child, entry["status"], entry.get("exit_reason"))
         if not self.child_progress_cb:
             return
         child = self.child
@@ -1121,6 +1130,7 @@ class _ChildRun:
         complete_kwargs: dict[str, Any] = {
             "preview": summary[:160] if summary else entry.get("error", ""),
             "status": entry["status"],
+            "exit_reason": entry.get("exit_reason"),
             "duration_seconds": duration,
             "summary": summary[:500] if summary else entry.get("error", ""),
             "input_tokens": _num(getattr(child, "session_prompt_tokens", 0)),
@@ -1147,6 +1157,8 @@ class _ChildRun:
         no turn is active."""
         child = self.child
         heartbeat.stop()
+        if self.stuck_watch is not None:
+            self.stuck_watch.stop()
 
         # Safe even if the child was never registered (ID missing on test doubles).
         if self.subagent_id:

@@ -229,6 +229,8 @@ def wrap_progress_callback(inner_cb, writer: LiveTranscriptWriter):
             inner_cb._flush()
 
     _cb._flush = _flush
+    # Attention flags relay through the child's own relay; let them find it under this tee.
+    _cb.__wrapped__ = inner_cb
     return _cb
 
 

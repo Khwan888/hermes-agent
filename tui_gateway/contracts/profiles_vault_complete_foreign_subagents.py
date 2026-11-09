@@ -14,7 +14,9 @@ from typing import Literal
 from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
-from .common import OpenModel, ProfileParams, SessionParams, SubagentRoute, SubagentStatus, SubagentUsage
+from .common import (
+    OpenModel, ProfileParams, SessionParams, SubagentAttention, SubagentAttentionReason, SubagentRoute, SubagentStatus, SubagentUsage,
+)
 from .config_free_tier_control import ModelOptionProvider
 from .registry import method
 
@@ -675,6 +677,11 @@ class SubagentSnapshot(Result):
     accepting_steer: bool | None = None
     #: The child's own stored session (``session.transcript`` reads it by ``subagent_id``); None until it has one.
     child_session_id: str | None = None
+    #: Live "needs you" flag (``tools/delegate_tool_attention.py``); all three null when none.
+    attention: SubagentAttention | None = None
+    attention_reason: SubagentAttentionReason | None = None
+    attention_since: float | None = None
+
     #: Current streamed reply segment, capped at 64 KiB; cleared when a tool begins.
     live_text: str | None = None
     duration_seconds: float | None = None
@@ -715,10 +722,19 @@ method("subagent.list", params=SessionParams, result=SubagentListResult,
        doc="Live children owned by this session (other sessions' children never leak).")
 
 
+class SubagentRosterAttention(Result):
+    """Live children of this conversation's spawn tree (any depth) that need the human."""
+
+    waiting: int = 0
+    stuck: int = 0
+
+
 class SubagentRosterEntry(Result):
     session_id: str
     subagents: int = 0
     background: int = 0
+    #: Present only when a count is nonzero.
+    attention: SubagentRosterAttention | None = None
 
 
 class SubagentRosterResult(Result):

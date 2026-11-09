@@ -132,6 +132,9 @@ _EVENT_HANDLERS: dict[Any, Optional[str]] = {
     DelegateEvent.TASK_TOOL_COMPLETED: None,
 }
 
+# Lifecycle bookends that say nothing about whether the running child is making progress.
+_NOT_ACTIVITY = frozenset({"subagent.spawn_requested", "subagent.complete"})
+
 def _normalize_event(event_type: Any) -> Any:
     """Lifecycle string / DelegateEvent / legacy string / ``delegate.*`` string
     → dispatch key; None for unknown events."""
@@ -307,6 +310,9 @@ class _ChildProgressRelay:
         self.parent_scope: Any = None  # owning parent agent; set by _build_child_progress_callback
         self.tool_count = 0  # per-subagent running counter
         self._stream_checkpoint_at: float | None = None
+        # Monotonic time of this child's last OWN relayed event; the stuck watch reads it
+        # (tools/delegate_tool_attention.py). Grandchild pass-through never stamps it.
+        self.last_event_at = time.monotonic()
 
     def _prefix(self) -> str:
         # The batch tag is resolved lazily from session_ref: the relay is built
@@ -468,9 +474,22 @@ class _ChildProgressRelay:
                     self.parent_cb(event_type, tool_name, preview, args, **kwargs)
             return
         key = _normalize_event(event_type)
+        if key is not None and key not in _NOT_ACTIVITY:
+            self._note_activity()
         method = None if key is None else _EVENT_HANDLERS.get(key, "_on_tool_started")
         if method is not None:
             getattr(self, method)(tool_name, preview, args, kwargs)
+
+    def _note_activity(self) -> None:
+        """Stamp an own event; a ``stuck`` flag clears on the child's next event."""
+        self.last_event_at = time.monotonic()
+        if self.subagent_id is not None:
+            with _active_subagents_lock:
+                rec = _active_subagents.get(self.subagent_id)
+                stuck = rec is not None and rec.get("attention") == "stuck"
+            if stuck:
+                from tools.delegate_tool_attention import clear_stuck
+                clear_stuck(self.subagent_id)
 
 def _build_child_progress_callback(
     task_index: int, goal: str, parent_agent, task_count: int = 1, *, subagent_id: Optional[str] = None,

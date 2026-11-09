@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # The delegate_tool_* siblings hold the pieces split out of this module; every name callers or patching tests reach as
 # ``tools.delegate_tool.<name>`` is re-imported here. Mutable flag globals live only in their owning module.
+from tools.delegate_tool_attention import start_stuck_watch
 from tools.delegate_tool_child_run import (
     _ChildRun, _attach_child, _build_child_goal_message, _close_child, _detach_child, _build_result_entry, _dump_subagent_timeout_diagnostic, _fabricated_entry,
     _lease_child_credential, _merge_late_steer, _register_child, _reserve_child_transcript, _start_heartbeat, _validate_child_output_schema,
@@ -409,6 +410,7 @@ def _run_single_child(
     _child_close_deferred = False
     try:
         heartbeat.start()
+        run.stuck_watch = start_stuck_watch(child, _subagent_id)
         _safe_progress(child_progress_cb, "subagent.start", preview=goal)
         run.seed_workspace()
         result, failure_entry, _child_close_deferred = run.await_child()
