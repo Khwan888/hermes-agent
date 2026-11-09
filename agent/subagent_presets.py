@@ -87,6 +87,16 @@ def _name(value):
     return value.strip()
 
 
+def preset_settings(name):
+    """The stored snapshot of one preset (public fields plus credential references). Raises ``ValueError``
+    when it does not exist or the library is unusable, so an explicit choice is never silently replaced."""
+    with _library() as state:
+        name = _name(name)
+        if name not in state["presets"]:
+            raise ValueError(f"Subagent preset {name!r} does not exist.")
+        return state["presets"][name]
+
+
 def default_preset():
     """``(name, settings)`` of the profile default, or ``(None, None)``.
 

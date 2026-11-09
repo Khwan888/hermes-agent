@@ -16,7 +16,7 @@ async def settings(connection, ref, params):
     from agent.delegation_settings import settings_for_session, update_settings
     from gateway.session_busy_controls import authorize
 
-    write = "override" in params
+    write = "override" in params or "preset_name" in params
     if write and not ref.session_id:
         raise RuntimeStoreError("invalid_params", field="session_id", detail="a settings write needs a session")
     if connection.actor.profile_id != connection.authority.profile_id:
@@ -33,7 +33,8 @@ async def settings(connection, ref, params):
         ignore = _ignores_user_config(authority, ref.session_id)
         with owner_scope(authority):
             if write:
-                update_settings(authority.db, ref.session_id, override=params["override"], ignore_user_config=ignore)
+                fields = {k: params[k] for k in ("override", "preset_name") if k in params}
+                update_settings(authority.db, ref.session_id, ignore_user_config=ignore, **fields)
             return settings_for_session(authority.db, ref.session_id, agent, ignore_user_config=ignore)
     try:
         return await asyncio.to_thread(run)
@@ -87,19 +88,32 @@ def offers_delegation(toolsets):
 def creation_settings(params, config, *, ignore_user_config=False, offers_delegation=False):
     """Freeze the chat's delegation defaults and explicit override before its first model request.
 
-    Without an explicit override, a chat that is given ``delegate_task`` captures the profile's default
-    preset. Later library edits never change it; bypass chats never read the library."""
+    ``delegation_preset`` names the preset a client chose for the new chat. Sent alone, the backend captures
+    that preset now. Sent with ``delegation_override``, it only labels the override: the client already
+    froze that preset's settings when the user picked it, so a later library edit cannot change them.
+    Without either, a chat that is given ``delegate_task`` captures the profile's default preset. Later
+    library edits never change a created chat; bypass chats never read the library."""
     from agent.delegation_credentials import merge_settings, normalize_override
-    from agent.delegation_settings import _BASE, runtime_projection, validate_override
+    from agent.delegation_settings import (_BASE, preset_override, runtime_projection, user_config_ignored,
+                                           validate_override)
 
     override = params.get("delegation_override")
+    name = params.get("delegation_preset")
+    if name is not None:
+        from agent.subagent_presets import _name
+        if user_config_ignored(ignore_user_config):
+            raise ValueError("This chat ignores user config, so profile subagent presets are unavailable.")
+        name = _name(name)
     defaults = {**_BASE, **({} if ignore_user_config else (config.get("delegation") or {}))}
     if override is not None:
         override = validate_override(normalize_override(override, defaults))
+    elif name is not None:
+        override = preset_override(name)
     elif offers_delegation and not ignore_user_config:
         from agent.subagent_presets import default_preset
         name, preset = default_preset()
         if preset:
             return {"override": None, "preset_name": name,
                     "effective": runtime_projection({**defaults, **preset})}
-    return {"override": override, "effective": runtime_projection(merge_settings(defaults, override))}
+    state = {"override": override, "effective": runtime_projection(merge_settings(defaults, override))}
+    return {**state, "preset_name": name} if name is not None else state

@@ -1391,6 +1391,7 @@ export interface DelegationSettingsParams {
   profile?: string | null
   session_id?: string | null
   override?: Record<string, unknown> | null
+  preset_name?: string | null
 }
 export interface DelegationSettingsResult {
   override: Record<string, unknown> | null
@@ -3197,6 +3198,7 @@ export interface WakeFeedResult {
 export interface SessionCreateParams {
   profile?: string | null
   delegation_override?: Record<string, unknown> | null
+  delegation_preset?: string | null
   cols?: number | null
   source?: string | null
   cwd?: string | null
@@ -5138,6 +5140,7 @@ export interface CanonicalGroupsPeerRegisterParams {
 export interface CanonicalCreateParams {
   profile?: string | null
   delegation_override?: Record<string, unknown> | null
+  delegation_preset?: string | null
   request_id?: string | null
   source?: 'cli' | 'tui' | 'gui' | 'acp' | 'tool' | 'oneshot'
   cwd?: string | null
@@ -6385,7 +6388,7 @@ export interface RpcMethods {
   'delegation.pause': { params: DelegationPauseParams; result: DelegationPauseResult }
   /** List, save, rename or delete the profile's subagent presets, or choose the one new chats start from. */
   'delegation.presets': { params: DelegationPresetsParams; result: DelegationPresetsResult }
-  /** Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy. */
+  /** Read defaults, or replace one chat's durable subagent settings (override or a captured preset). Existing children keep their policy. */
   'delegation.settings': { params: DelegationSettingsParams; result: DelegationSettingsResult }
   /** Running subagent tree plus the spawn pause flag and limits. */
   'delegation.status': { params: ProfileParams; result: DelegationStatusResult }
@@ -7124,7 +7127,7 @@ export interface CanonicalRpcMethods {
   'cron.submit': { params: CronRunParams; result: CronSubmitResult }
   /** List, save, rename or delete the profile's subagent presets, or choose the one new chats start from. */
   'delegation.presets': { params: DelegationPresetsParams; result: DelegationPresetsResult }
-  /** Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy. */
+  /** Read defaults, or replace one chat's durable subagent settings (override or a captured preset). Existing children keep their policy. */
   'delegation.settings': { params: DelegationSettingsParams; result: DelegationSettingsResult }
   'groups.approve': { params: CanonicalRoomApproveParams; result: GroupsApproveResult }
   /** Read one committed attachment for a live room viewer. */

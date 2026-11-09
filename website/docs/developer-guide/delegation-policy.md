@@ -42,4 +42,13 @@ Every call returns `{presets: [{name, settings}], default_preset}`. A saved pres
 
 A new chat that is given `delegate_task` and has no explicit override starts from the default preset; `delegation.settings` reports its name as `preset_name`. Only then is the library read. Existing chats, resumed chats and running children keep what they captured, so renaming, deleting or changing the default affects new chats only. Resetting a chat's override (`null`) returns it to the plain profile defaults. Ignore-user-config chats and managed workers never read the library.
 
+A client can also choose a preset for one chat:
+
+```json
+{"method":"delegation.settings","params":{"session_id":"<session-id>","preset_name":"research"}}
+{"method":"session.create","params":{"delegation_preset":"research"}}
+```
+
+The chat captures the preset's settings (and credential references) as its own override and reports `preset_name`; later library edits never change it. `preset_name` and `override` cannot be combined in one write, and an unknown name is refused without a write. On `session.create`, `delegation_preset` alone captures the named preset; sent together with `delegation_override` it only labels that override, so a client that froze a preset's settings when the user picked it keeps exactly those. A later `override` write (including `null`) clears the name. Ignore-user-config chats refuse both.
+
 The library is optional. A missing, empty or malformed file never stops a chat from starting: chats fall back to the profile defaults and a warning is logged. Management calls report the problem instead, and the file is left untouched so it can be repaired. Older gateways do not implement `delegation.presets`; clients should hide preset controls on method-not-found.

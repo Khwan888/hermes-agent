@@ -296,11 +296,27 @@ def settings_for_session(db=None, session_id="", agent=None, *, ignore_user_conf
             "preset_name": preset_name if isinstance(preset_name, str) else None}
 
 
-def update_settings(db, session_id, *, override=_MISSING, ignore_user_config=None):
+def preset_override(name):
+    """A chat override that captures preset ``name`` now: its public fields (validated like any override)
+    plus its credential references. Later library edits never reach a chat that captured it."""
+    from agent.subagent_presets import preset_settings
+    preset = preset_settings(name)
+    return {**validate_override(_public(preset)), **{k: v for k, v in preset.items() if k.startswith("_credential_")}}
+
+
+def update_settings(db, session_id, *, override=_MISSING, preset_name=None, ignore_user_config=None):
+    """Replace one chat's override, or capture a named preset for it. ``override=None`` resets the chat to the
+    plain profile defaults (no preset name)."""
     if not db or not db.get_session(session_id):
         raise ValueError("Session is not persisted.")
+    if preset_name is not None and override is not _MISSING:
+        raise ValueError("Choose a preset or an override, not both.")
+    if preset_name is not None and user_config_ignored(ignore_user_config):
+        raise ValueError("This chat ignores user config, so profile subagent presets are unavailable.")
     defaults = profile_defaults(ignore_user_config)
-    if override is not _MISSING and override is not None:
+    if preset_name is not None:
+        override = preset_override(preset_name)
+    elif override is not _MISSING and override is not None:
         from agent.delegation_credentials import normalize_override
         current = _stored(db, session_id)
         previous = current.get("effective") if isinstance(current, dict) else _pinned_config(db, session_id)
@@ -308,9 +324,11 @@ def update_settings(db, session_id, *, override=_MISSING, ignore_user_config=Non
         # route left with neither provider nor endpoint is refused rather than silently inherited.
         override = validate_override(normalize_override(override, defaults, *([previous] if previous else [])))
     elif override is _MISSING:
-        raise ValueError("A settings write needs override.")
+        raise ValueError("A settings write needs override or preset_name.")
     from agent.delegation_credentials import merge_settings
     state = {"override": override, "effective": runtime_projection(merge_settings(defaults, override))}
+    if preset_name is not None:
+        state["preset_name"] = preset_name.strip()
     db.patch_session_model_config(session_id, {_KEY: state})
     return settings_for_session(db, session_id, ignore_user_config=ignore_user_config)
 

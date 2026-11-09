@@ -764,7 +764,7 @@
     },
     {
       "name": "delegation.settings",
-      "summary": "Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy.",
+      "summary": "Read defaults, or replace one chat's durable subagent settings (override or a captured preset). Existing children keep their policy.",
       "params": [
         {
           "name": "params",
@@ -8682,6 +8682,18 @@
             ],
             "default": null,
             "title": "Delegation Override"
+          },
+          "delegation_preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Delegation Preset"
           },
           "request_id": {
             "anyOf": [
@@ -17275,6 +17287,18 @@
             ],
             "default": null,
             "title": "Override"
+          },
+          "preset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Preset Name"
           }
         },
         "title": "DelegationSettingsParams",
@@ -38012,6 +38036,18 @@
             "default": null,
             "title": "Delegation Override"
           },
+          "delegation_preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Delegation Preset"
+          },
           "cols": {
             "anyOf": [
               {
@@ -50184,7 +50220,7 @@
     },
     {
       "name": "delegation.settings",
-      "summary": "Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy.",
+      "summary": "Read defaults, or replace one chat's durable subagent settings (override or a captured preset). Existing children keep their policy.",
       "params": [
         {
           "name": "params",

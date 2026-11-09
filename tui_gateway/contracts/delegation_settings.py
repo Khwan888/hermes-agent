@@ -12,6 +12,7 @@ class DelegationSettingsParams(Params):
     profile: str | None = None
     session_id: str | None = None
     override: dict[str, JsonValue] | None = None
+    preset_name: str | None = None
 
 
 class DelegationSettingsResult(Result):
@@ -43,6 +44,7 @@ class DelegationPresetsResult(Result):
 
 for register in (method, canonical_method):
     register("delegation.settings", params=DelegationSettingsParams, result=DelegationSettingsResult,
-             doc="Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy.")
+             doc="Read defaults, or replace one chat's durable subagent settings (override or a captured preset). "
+                 "Existing children keep their policy.")
     register("delegation.presets", params=DelegationPresetsParams, result=DelegationPresetsResult,
              doc="List, save, rename or delete the profile's subagent presets, or choose the one new chats start from.")
