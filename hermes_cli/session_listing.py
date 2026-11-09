@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import shlex
 from pathlib import Path
 from typing import Any
@@ -142,8 +143,39 @@ def query_session_subagents(db: Any, session_id: str, *, limit: int, offset: int
     annotate_subagent_counts(db, sessions)
     for session in sessions:
         session['unread'] = db.session_unread(session)
+        session['subagent_observation'] = _stored_subagent_observation(
+            db, session['id'], session.get('_lineage_root_id'))
     return dict(sessions=sessions, total=total, limit=limit, offset=offset,
                 has_more=offset + len(sessions) < total)
+
+
+# ``agent.runtime_route.runtime_route`` keys a finished child's row may carry; nothing else of the route.
+_OBSERVED_ROUTE_KEYS = ('provider', 'model', 'requested_effort', 'wire_effort', 'effective_effort',
+                        'effort_source', 'reasoning_status', 'fallback_activated', 'observed')
+
+
+def _stored_subagent_observation(db: Any, tip: str, root: str | None) -> dict[str, Any] | None:
+    """``{status, route, duration_seconds}`` of the child's last remembered observation (its newest segment's,
+    else its root's), or None when none is usable. Only measured values: the launch config never fills a gap."""
+    from tools.delegate_tool_observation import stored_subagent
+
+    for sid in dict.fromkeys(s for s in (tip, root) if s):
+        observed = stored_subagent(db, sid)
+        if observed is not None:
+            break
+    else:
+        return None
+    route = observed.get('route')
+    route = {key: route[key] for key in _OBSERVED_ROUTE_KEYS
+             if key in route and (route[key] is None or type(route[key]) in (str, bool, int, float))
+             } if isinstance(route, dict) else None
+    status, duration = observed.get('status'), observed.get('duration_seconds')
+    return {
+        'status': status if isinstance(status, str) else None,
+        'route': route or None,
+        'duration_seconds': duration if isinstance(duration, (int, float)) and not isinstance(duration, bool)
+        and math.isfinite(duration) else None,
+    }
 
 
 def _project_subagent_rows(db: Any, ids: list[str]) -> list[dict[str, Any]]:

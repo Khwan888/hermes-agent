@@ -269,3 +269,34 @@ def test_unavailable_subagent_store_is_retryable_not_an_empty_page(subagent_clie
 
     monkeypatch.setattr(web_server_sessions, "_open_session_db_for_profile", unavailable)
     assert client.get("/api/sessions/root/subagents").status_code == 503
+
+
+def test_finished_subagent_rows_carry_their_stored_runtime_observation(subagent_client):
+    """After a reload the Agents tab reads finished subagents from this page: each row carries the child's own
+    measured status/route/duration (an interrupted child is not 'completed'; a fallback route is visible),
+    never live text or meters, and null when the observation is missing or unusable."""
+    import json
+
+    client, home = subagent_client
+    route = {"provider": "openrouter", "model": "fallback/model", "requested_effort": "high",
+             "wire_effort": "medium", "effective_effort": "medium", "effort_source": "configured",
+             "reasoning_status": "enabled", "fallback_activated": True, "secret_header": {"x": "y"}}
+    with SessionDB(db_path=home / "state.db") as db:
+        db.set_meta("subagent-observation:alpha", json.dumps({
+            "status": "interrupted", "duration_seconds": 7.5, "model": "fallback/model", "route": route,
+            "live_text": "partial reply", "usage": {"output_tokens": 9}}))
+        db.set_meta("subagent-observation:beta", "{not json")
+        db.create_session("zeta", source="subagent", parent_session_id="root")
+        db.end_session("zeta", "compression")
+        db.create_session("zeta-tip", source="subagent", parent_session_id="zeta")
+        db.set_meta("subagent-observation:zeta", json.dumps({"status": "completed", "duration_seconds": 3,
+                                                               "route": "not-a-dict"}))
+    rows = {row["id"]: row for row in client.get("/api/sessions/root/subagents").json()["sessions"]}
+    assert rows["alpha"]["subagent_observation"] == {
+        "status": "interrupted", "duration_seconds": 7.5,
+        "route": {key: value for key, value in route.items() if key != "secret_header"}}
+    assert rows["beta"]["subagent_observation"] is None
+    # A rotated child falls back to its root's observation; a wrong-typed route is unknown, not guessed.
+    assert rows["zeta-tip"]["subagent_observation"] == {"status": "completed", "duration_seconds": 3, "route": None}
+    nested = client.get("/api/sessions/beta/subagents").json()["sessions"]
+    assert [row["subagent_observation"] for row in nested] == [None]

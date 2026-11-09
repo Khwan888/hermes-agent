@@ -360,6 +360,13 @@ class _ChildProgressRelay:
         self._relay("subagent.start", preview=preview or self.goal_label or "", **kwargs)
 
     def _on_complete(self, tool_name, preview, args, kwargs):
+        from tools.delegate_tool_observation import remember_subagent
+        with _active_subagents_lock:
+            record = dict(_active_subagents.get(self.subagent_id, {}))
+        if record:
+            with _quiet("Could not retain the subagent's observed ending: %s"):
+                remember_subagent(record.get("agent"), record, kwargs.get("status", "completed"),
+                                  kwargs.get("duration_seconds"))
         # Failed child: echo one clean reason line into the CLI tree so the human
         # sees WHY, not just a vanished branch (gateway renders off the relayed event).
         # The echo is an automatic diagnostic presentation: it goes through the warning
