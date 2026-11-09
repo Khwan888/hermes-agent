@@ -2641,6 +2641,13 @@ export const esOverrides = {
     resetToMine: 'Volver a mi mapa'
   },
   agents: {
+    providerUnknown: 'Proveedor desconocido',
+    modelUnknown: 'Modelo desconocido',
+    reasoningOff: 'Razonamiento desactivado',
+    effortUnknown: 'Esfuerzo desconocido',
+    routeFallback: 'Ruta alternativa',
+    defaultEffort: effort => `${effort} (predeterminado)`,
+    configuredEffort: effort => `${effort} (configurado, aún no observado)`,
     extendedTranscript: 'Transcripción ampliada',
     transcriptTruncated: 'Mostrando los últimos 16 KiB',
     transcriptUnavailable: 'Transcripción en vivo no disponible',

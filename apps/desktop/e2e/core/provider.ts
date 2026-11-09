@@ -8,6 +8,11 @@
  * message). Two scenarios can never consume each other's script, and a replay
  * or retry of the same request gets the same answer.
  *
+ * Named `routes` expose independent loopback base URLs at `provider.routes[name].url`
+ * (append `/v1` for a provider's `api` setting), each a separately configured provider.
+ * A route's `httpStatus` persists across retries; only the real backend chooses a
+ * fallback. Recorded `effort` is what the backend actually sent, never the expectation.
+ *
  * Every chunk actually written is recorded so the oracle can assert
  * "rendered == persisted == what the provider streamed".
  */
@@ -46,7 +51,25 @@ export interface Step {
   holdBeforeFinish?: Gate
 }
 
+/** A separate local endpoint stands for a real configured provider, not a fake fallback inside this server. */
+export interface ProviderRoute {
+  model: string
+  /** Persistent failure, including SDK retries. */
+  httpStatus?: number
+}
+
+export interface ProviderOptions {
+  routing?: 'last-user' | 'first-user'
+  routes?: Record<string, ProviderRoute>
+}
+
 export interface RecordedCompletion {
+  /** Named route the request reached (null = the root URL). */
+  route: null | string
+  model: string
+  /** Reasoning effort actually received on the wire. */
+  effort: null | string
+  httpStatus: number
   marker: null | string
   step: number
   stream: boolean
@@ -61,6 +84,7 @@ export interface RecordedCompletion {
 
 export interface ScriptedProvider {
   url: string
+  routes: Record<string, ProviderRoute & { url: string }>
   /** Register the steps a turn keyed by `marker` answers with (step i = i-th completion of that turn). */
   script: (marker: string, steps: Step[]) => void
   /**
@@ -137,7 +161,7 @@ function chunk(model: string, delta: Record<string, unknown>, finish: null | str
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 15))
 
-export function startScriptedProvider(options: { routing?: 'last-user' | 'first-user' } = {}): Promise<ScriptedProvider> {
+export function startScriptedProvider(options: ProviderOptions = {}): Promise<ScriptedProvider> {
   const scripts = new Map<string, Step[]>()
   const promptScripts: { label: string; needle: string; steps: Step[] }[] = []
   const completions: RecordedCompletion[] = []
@@ -268,16 +292,31 @@ export function startScriptedProvider(options: { routing?: 'last-user' | 'first-
   }
 
   const server = http.createServer((req, res) => {
-    if (req.method === 'GET' && req.url?.startsWith('/v1/models')) {
+    const path = new URL(req.url ?? '/', 'http://localhost').pathname
+    const match = /^\/routes\/([a-zA-Z0-9_-]+)(\/v1\/.*)$/.exec(path)
+    const routeName = match?.[1] ?? null
+    const route = routeName ? options.routes?.[routeName] : undefined
+    const endpoint = match?.[2] ?? path
+
+    if (routeName && !route) {
+      res.writeHead(404).end()
+
+      return
+    }
+
+    if (req.method === 'GET' && endpoint === '/v1/models') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(
-        JSON.stringify({ object: 'list', data: [{ id: 'mock-model', object: 'model', created: 0, owned_by: 'core' }] })
+        JSON.stringify({
+          object: 'list',
+          data: [{ id: route?.model ?? 'mock-model', object: 'model', created: 0, owned_by: routeName ?? 'core' }]
+        })
       )
 
       return
     }
 
-    if (req.method !== 'POST' || !req.url?.startsWith('/v1/chat/completions')) {
+    if (req.method !== 'POST' || endpoint !== '/v1/chat/completions') {
       res.writeHead(404, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: 'not found' }))
 
@@ -305,9 +344,13 @@ export function startScriptedProvider(options: { routing?: 'last-user' | 'first-
       // Unscripted traffic (auxiliary calls, a marker-less prompt) gets a
       // fixed short answer; it is recorded, never matched to a scenario.
       const step: Step = steps?.[Math.min(stepIndex, steps.length - 1)] ?? { text: ['ok'] }
-      const model = typeof body.model === 'string' ? body.model : 'mock-model'
+      const model = route?.model ?? (typeof body.model === 'string' ? body.model : 'mock-model')
 
       const rec: RecordedCompletion = {
+        route: routeName,
+        model,
+        effort: body.reasoning_effort ?? body.reasoning?.effort ?? null,
+        httpStatus: route?.httpStatus ?? 200,
         marker: steps ? key : null,
         step: stepIndex,
         stream: body.stream === true,
@@ -321,7 +364,11 @@ export function startScriptedProvider(options: { routing?: 'last-user' | 'first-
 
       completions.push(rec)
 
-      if (rec.stream) {
+      if (rec.httpStatus !== 200) {
+        res.writeHead(rec.httpStatus, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: { message: `Scripted route ${routeName} failed`, type: 'server_error' } }))
+        rec.finished = true
+      } else if (rec.stream) {
         void streamStep(res, model, step, rec).catch(() => res.destroy())
       } else {
         plainJson(res, model, step, rec)
@@ -333,8 +380,15 @@ export function startScriptedProvider(options: { routing?: 'last-user' | 'first-
     server.on('error', reject)
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo
+      const url = `http://127.0.0.1:${port}`
       resolve({
-        url: `http://127.0.0.1:${port}`,
+        url,
+        routes: Object.fromEntries(
+          Object.entries(options.routes ?? {}).map(([name, route]) => [
+            name,
+            { ...route, url: `${url}/routes/${name}` }
+          ])
+        ),
         script: (marker, steps) => {
           scripts.set(marker, steps)
         },

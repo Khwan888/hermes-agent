@@ -2651,6 +2651,13 @@ export const deOverrides = {
     resetToMine: 'Zurück zu meiner Map'
   },
   agents: {
+    providerUnknown: 'Anbieter unbekannt',
+    modelUnknown: 'Modell unbekannt',
+    reasoningOff: 'Reasoning aus',
+    effortUnknown: 'Aufwand unbekannt',
+    routeFallback: 'Ausweichroute',
+    defaultEffort: effort => `${effort} (Standard)`,
+    configuredEffort: effort => `${effort} (konfiguriert, noch nicht beobachtet)`,
     extendedTranscript: 'Extended Transcript',
     transcriptTruncated: 'Zeigt die letzten 16 KiB',
     transcriptUnavailable: 'Live-Transcript nicht verfügbar',
