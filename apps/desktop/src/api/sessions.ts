@@ -246,6 +246,17 @@ const sidebarBatchEndpointMissing = new Set<string>()
 // forgets every remembered capability and re-probes.
 export function resetSidebarBatchCapability() {
   sidebarBatchEndpointMissing.clear()
+  subagentListingMissing.clear()
+}
+
+// Same per-connection capability verdict for the child-listing route (`/api/sessions/{id}/subagents`):
+// an older backend lacks it, so the Agents tab shows live subagents only instead of re-probing.
+const subagentListingMissing = new Set<string>()
+
+export const subagentListingRouteMissing = (connectionKey: string) => subagentListingMissing.has(connectionKey)
+
+export function markSubagentListingRouteMissing(connectionKey: string) {
+  subagentListingMissing.add(connectionKey)
 }
 
 // Compatibility fallback: reassemble the three sidebar slices from the

@@ -3167,7 +3167,7 @@ export function useSessionActions({
         // differ from the stored→runtime mapping (cached/tiled runtime), so
         // clear the stored id and both runtime ids — once per distinct id.
         for (const sid of new Set([storedSessionId, closingRuntimeId, tiledRuntimeId].filter(Boolean) as string[])) {
-          clearSessionSubagents(sid)
+          clearSessionSubagents(sid, { forget: true })
           clearSessionTodos(sid)
           clearSessionGoal(sid)
           resetSessionBackground(sid)

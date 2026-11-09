@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  $finishedSubagentsBySession,
   $subagentsBySession,
   activeSubagentCount,
   buildSubagentTree,
@@ -445,5 +446,47 @@ describe('subagent store', () => {
     upsertSubagent('s1', { goal: 'task', status: 'running', subagent_id: 'late1', task_index: 0, text: 'late' })
 
     expect(listFor('s1')[0]?.status).toBe('failed')
+  })
+})
+
+describe('finished subagents stay listed for their session', () => {
+  beforeEach(() => {
+    $subagentsBySession.set({})
+    $finishedSubagentsBySession.set({})
+  })
+
+  it("keeps a turn's finished subagents for the Agents tab after the next turn prunes them", () => {
+    upsertSubagent('s1', {
+      child_session_id: 'child-a',
+      goal: 'a',
+      status: 'completed',
+      subagent_id: 'a',
+      task_index: 0
+    })
+    upsertSubagent('s1', { goal: 'b', status: 'running', subagent_id: 'b', task_index: 1 })
+    upsertSubagent('s2', { goal: 'other', status: 'completed', subagent_id: 'o', task_index: 0 })
+
+    pruneFinishedSessionSubagents('s1')
+    pruneFinishedSessionSubagents('s2')
+
+    expect(listFor('s1').map(n => n.id)).toEqual(['b'])
+    const panel = subagentsForPanel($subagentsBySession.get(), 's1', $finishedSubagentsBySession.get())
+    expect(panel.map(n => [n.id, n.sessionId])).toEqual([
+      ['a', 'child-a'],
+      ['b', undefined]
+    ])
+    // Another session's finished history never leaks into this session's panel.
+    expect(panel.some(n => n.id === 'o')).toBe(false)
+  })
+
+  it('keeps finished subagents through a Stop but forgets them with the session', () => {
+    upsertSubagent('s1', { goal: 'a', status: 'completed', subagent_id: 'a', task_index: 0 })
+    clearSessionSubagents('s1')
+    expect(
+      subagentsForPanel($subagentsBySession.get(), 's1', $finishedSubagentsBySession.get()).map(n => n.id)
+    ).toEqual(['a'])
+
+    clearSessionSubagents('s1', { forget: true })
+    expect($finishedSubagentsBySession.get().s1).toBeUndefined()
   })
 })

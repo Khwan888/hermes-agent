@@ -57,6 +57,31 @@ const TOOL_PREVIEW_MAX = 96
 
 export const $subagentsBySession = atom<Record<string, SubagentProgress[]>>({})
 
+/**
+ * Finished subagents a turn boundary (or a Stop) pruned from a session's live
+ * list. The live list is the CURRENT turn's — the status stack shows only that —
+ * but the Agents tab keeps the session's finished subagents so they stay one
+ * click away after the next turn starts. Bounded per session; dropped with the
+ * session (`clearSessionSubagents(sid, { forget: true })`) or a store reset.
+ */
+export const $finishedSubagentsBySession = atom<Record<string, SubagentProgress[]>>({})
+
+const MAX_FINISHED_PER_SESSION = 100
+
+function keepFinished(sid: string, rows: readonly SubagentProgress[]) {
+  const done = rows.filter(item => TERMINAL.has(item.status))
+
+  if (!done.length) {
+    return
+  }
+
+  const map = $finishedSubagentsBySession.get()
+  const ids = new Set(done.map(item => item.id))
+  const kept = [...(map[sid] ?? []).filter(item => !ids.has(item.id)), ...done].slice(-MAX_FINISHED_PER_SESSION)
+
+  $finishedSubagentsBySession.set({ ...map, [sid]: kept })
+}
+
 // A turn prunes display rows, not child identities. Keep retired IDs with the
 // session's current list so late starts/rosters cannot recreate completed work.
 // Clearing the session (or resetting the store) releases this history too.
@@ -367,11 +392,20 @@ export function reconcileSubagentSnapshot(
   }
 }
 
-export function clearSessionSubagents(sid: string) {
+export function clearSessionSubagents(sid: string, opts: { forget?: boolean } = {}) {
   const map = $subagentsBySession.get()
+
+  if (opts.forget && Object.hasOwn($finishedSubagentsBySession.get(), sid)) {
+    const { [sid]: _forgotten, ...kept } = $finishedSubagentsBySession.get()
+    $finishedSubagentsBySession.set(kept)
+  }
 
   if (!hasSubagentsForSession(map, sid)) {
     return
+  }
+
+  if (!opts.forget) {
+    keepFinished(sid, map[sid] ?? [])
   }
 
   const { [sid]: _drop, ...rest } = map
@@ -404,6 +438,7 @@ export function pruneFinishedSessionSubagents(sid: string) {
     return
   }
 
+  keepFinished(sid, list)
   setSessionSubagents(sid, list, next)
 }
 
@@ -507,11 +542,19 @@ export const activeSubagentCount = (items: readonly SubagentProgress[]) =>
  *  stops accumulating forever. */
 export const subagentsForPanel = (
   bySession: Record<string, SubagentProgress[]>,
-  activeSessionId: string | null
-): SubagentProgress[] =>
-  Object.entries(bySession).flatMap(([sid, items]) =>
+  activeSessionId: string | null,
+  finishedBySession: Record<string, SubagentProgress[]> = {}
+): SubagentProgress[] => {
+  const live = Object.entries(bySession).flatMap(([sid, items]) =>
     sid === activeSessionId ? items : items.filter(item => item.status === 'running' || item.status === 'queued')
   )
+
+  // The active session's earlier turns' subagents, behind its live rows (live wins on id).
+  const ids = new Set(live.map(item => item.id))
+  const finished = activeSessionId ? (finishedBySession[activeSessionId] ?? []) : []
+
+  return [...finished.filter(item => !ids.has(item.id)), ...live]
+}
 
 export const failedSubagentCount = (items: readonly SubagentProgress[]) =>
   items.filter(item => item.status === 'failed' || item.status === 'interrupted').length

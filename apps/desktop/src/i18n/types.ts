@@ -2078,6 +2078,11 @@ export interface Translations extends NoticeTranslations {
     subtitle: string
     emptyTitle: string
     emptyDesc: string
+    openSubagent: string
+    openSubagentTitle: string
+    historyLoading: string
+    historyFailed: string
+    historyFailedDesc: string
     running: string
     failed: string
     done: string
