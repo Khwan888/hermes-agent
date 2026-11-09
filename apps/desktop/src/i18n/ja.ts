@@ -3520,6 +3520,8 @@ export const jaOverrides = {
       statusDone: '完了',
       resultUnavailable: '結果を取得できません',
       resultInterrupted: '中断されました',
+      delegateSubagentMissing: 'このサブエージェントの保存済みセッションが見つかりません',
+      delegateReadOnly: "サブエージェント · 読み取り専用の会話記録",
       memoryWriteNoted: 'メモリへの書き込みを記録',
       actions: {
         read: '読み取り完了',

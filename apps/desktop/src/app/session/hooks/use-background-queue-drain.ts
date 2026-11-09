@@ -27,6 +27,7 @@ import {
   sessionMatchesStoredId
 } from '@/store/session'
 import { $workingSessionIds } from '@/store/session-states'
+import { isWatchWindow } from '@/store/windows'
 
 import type { SubmitTextOptions } from './use-prompt-actions/utils'
 
@@ -229,7 +230,7 @@ export function useBackgroundQueueDrain({
     // Preserve the retry budget while session discovery runs at boot, on a
     // gateway/profile switch, or during a refresh over an empty list.
     // Once discovery settles, submitText can resume by stored id.
-    if (!enabled || sessionsLoading) {
+    if (!enabled || sessionsLoading || isWatchWindow()) {
       return
     }
 

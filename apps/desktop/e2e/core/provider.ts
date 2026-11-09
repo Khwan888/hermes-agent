@@ -89,7 +89,7 @@ function textOf(content: unknown): string {
   return ''
 }
 
-function turnPosition(messages: any[]): { marker: null | string; prompt: string; step: number } {
+function turnPosition(messages: any[], routing: 'last-user' | 'first-user'): { marker: null | string; prompt: string; step: number } {
   let lastUser = -1
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -105,7 +105,21 @@ function turnPosition(messages: any[]): { marker: null | string; prompt: string;
   }
 
   const prompt = textOf(messages[lastUser].content)
-  const marker = MARKER_RE.exec(prompt)?.[0] ?? null
+  let marker = MARKER_RE.exec(prompt)?.[0] ?? null
+
+  if (routing === 'first-user') {
+    const firstUser = messages.findIndex(m => m?.role === 'user')
+    const first = textOf(messages[firstUser]?.content)
+    const child = /\bK\d+-[a-z0-9]+\b/.exec(first)?.[0]
+
+    if (child) {
+      marker = firstUser === lastUser ? child : `${child}~s`
+    } else if (!marker) {
+      const parent = MARKER_RE.exec(first)?.[0]
+      marker = parent ? `${parent}~n` : null
+    }
+  }
+
   const step = messages.slice(lastUser + 1).filter(m => m?.role === 'assistant').length
 
   return { marker, prompt, step }
@@ -123,7 +137,7 @@ function chunk(model: string, delta: Record<string, unknown>, finish: null | str
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 15))
 
-export function startScriptedProvider(): Promise<ScriptedProvider> {
+export function startScriptedProvider(options: { routing?: 'last-user' | 'first-user' } = {}): Promise<ScriptedProvider> {
   const scripts = new Map<string, Step[]>()
   const promptScripts: { label: string; needle: string; steps: Step[] }[] = []
   const completions: RecordedCompletion[] = []
@@ -197,7 +211,7 @@ export function startScriptedProvider(): Promise<ScriptedProvider> {
         chunk(model, {
           tool_calls: calls.map((call, index) => ({
             index,
-            id: `call_core_${rec.marker}_${rec.step}_${index}`,
+            id: `call_core_${rec.marker}_${rec.step}_${index}`.replace(/[^A-Za-z0-9_-]/g, '_'),
             type: 'function',
             function: { name: call.name, arguments: JSON.stringify(call.args) }
           }))
@@ -239,7 +253,7 @@ export function startScriptedProvider(): Promise<ScriptedProvider> {
               ...(calls.length > 0
                 ? {
                     tool_calls: calls.map((call, index) => ({
-                      id: `call_core_${rec.marker}_${rec.step}_${index}`,
+                      id: `call_core_${rec.marker}_${rec.step}_${index}`.replace(/[^A-Za-z0-9_-]/g, '_'),
                       type: 'function',
                       function: { name: call.name, arguments: JSON.stringify(call.args) }
                     }))
@@ -284,7 +298,7 @@ export function startScriptedProvider(): Promise<ScriptedProvider> {
       }
 
       const messages: any[] = Array.isArray(body.messages) ? body.messages : []
-      const { marker, prompt, step: stepIndex } = turnPosition(messages)
+      const { marker, prompt, step: stepIndex } = turnPosition(messages, options.routing ?? 'last-user')
       const byPrompt = marker ? undefined : promptScripts.find(entry => prompt.includes(entry.needle))
       const key = marker ?? byPrompt?.label ?? null
       const steps = marker ? scripts.get(marker) : byPrompt?.steps

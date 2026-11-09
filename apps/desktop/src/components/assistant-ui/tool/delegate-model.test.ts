@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { $subagentsBySession, reconcileSubagentSnapshot, type SubagentProgress } from '@/store/subagents'
 
-import { delegateGoals, delegateRowsFromCall, mergeDelegateRows } from './delegate-model'
+import { delegateGoals, delegateResultChild, delegateRowsFromCall, mergeDelegateRows } from './delegate-model'
 
 const subagent = (overrides: Partial<SubagentProgress>): SubagentProgress => ({
   filesRead: [],
@@ -302,4 +302,64 @@ describe('mergeDelegateRows', () => {
 
     expect(merged[0]).toMatchObject({ model: 'm0', status: 'running' })
   })
+})
+
+describe('child ids on a call result', () => {
+  // The live store forgets a child when it finishes; the call's own result is
+  // what still names it after a reload or restart (live-audit L1).
+  it('reads a background dispatch by task index, skipping a refused task', () => {
+    const result = {
+      status: 'dispatched',
+      goals: ['A', 'refused', 'C'],
+      // subagent_ids lists only the children that started; each id carries its task.
+      subagent_ids: ['sa-0-aaaa', 'sa-2-cccc'],
+      child_session_ids: ['child-a', null, 'child-c']
+    }
+
+    const rows = delegateRowsFromCall({ tasks: [{ goal: 'A' }, { goal: 'refused' }, { goal: 'C' }] }, result, 'call')
+
+    expect(rows.map(r => [r.taskIndex, r.sessionId, r.subagentId])).toEqual([
+      [0, 'child-a', 'sa-0-aaaa'],
+      [1, undefined, undefined],
+      [2, 'child-c', 'sa-2-cccc']
+    ])
+  })
+
+  it('reads a settled result per entry', () => {
+    const result = {
+      results: [
+        { task_index: 1, status: 'completed', child_session_id: 'child-b', subagent_id: 'sa-1-bbbb' },
+        { task_index: 0, status: 'failed', child_session_id: 'child-a' }
+      ]
+    }
+
+    expect(delegateResultChild(result, 0)).toEqual({ sessionId: 'child-a', subagentId: undefined })
+    expect(delegateResultChild(result, 1)).toEqual({ sessionId: 'child-b', subagentId: 'sa-1-bbbb' })
+    expect(delegateResultChild({ status: 'dispatched', goals: ['A'] }, 0)).toEqual({
+      sessionId: undefined,
+      subagentId: undefined
+    })
+  })
+
+  it('keeps the result ids when a live row joins without a session id of its own', () => {
+    const rows = delegateRowsFromCall(
+      { goal: 'Research Cursor' },
+      { status: 'dispatched', child_session_ids: ['child-1'] }
+    )
+
+    const merged = mergeDelegateRows(rows, [subagent({ id: 'sa-0-live', status: 'completed' })])
+
+    expect(merged[0]).toMatchObject({
+      sessionId: 'child-1',
+      status: 'completed',
+      subagentId: 'sa-0-live',
+      taskIndex: 0
+    })
+  })
+})
+
+it('never lends a task-indexed settled sibling to a refused task', () => {
+  const result = { results: [{ task_index: 1, child_session_id: 'only-beta', subagent_id: 'sa-1-beta', status: 'completed' }] }
+  expect(delegateResultChild(result, 0).sessionId).toBeUndefined()
+  expect(delegateResultChild(result, 1).sessionId).toBe('only-beta')
 })

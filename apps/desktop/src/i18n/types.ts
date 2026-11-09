@@ -4134,6 +4134,8 @@ export interface Translations extends NoticeTranslations {
       /** Over-budget / rejected memory write title — not "Saved to memory". */
       resultUnavailable: string
       resultInterrupted: string
+      delegateSubagentMissing: string
+      delegateReadOnly: string
       memoryWriteNoted: string
       actions: {
         read: string

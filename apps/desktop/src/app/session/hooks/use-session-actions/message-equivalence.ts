@@ -28,6 +28,7 @@ const COMPARED_FIELDS = [
   'durableComplete',
   'recovered',
   'asyncResult',
+  'asyncDelegationId',
   'asyncResultKind',
   'id',
   'role',

@@ -21,7 +21,12 @@ export interface DelegateRow {
   model?: string
   /** The child's own session id, when it reported one — opens its window. */
   sessionId?: string
+  /** The child's control id (`sa-<task>-…`), when the live store or the result named it. */
+  subagentId?: string
   status: DelegateRowStatus
+  /** The task's index in its `delegate_task` call: with the call id, how a stored
+   *  card asks the backend which subagent ran it once nothing else names it. */
+  taskIndex: number
 }
 
 /**
@@ -63,6 +68,39 @@ function settledRowStatus(status: string): DelegateRowStatus {
   return status === '' || status === 'ok' || status === 'completed' ? 'completed' : 'failed'
 }
 
+const stringAt = (values: unknown, index: number): string | undefined => {
+  const value = Array.isArray(values) ? values[index] : undefined
+
+  return typeof value === 'string' && value ? value : undefined
+}
+
+/**
+ * What the call's own result says about the subagent behind task `index`: its
+ * stored session and control id. A background dispatch lists them by task
+ * (`child_session_ids` is task-indexed; `subagent_ids` lists the children that
+ * started, each `sa-<task>-…`); a settled result names them per entry. These
+ * survive the live store forgetting the child — after it finishes, a reload,
+ * a restart — so the card stays openable without any lookup.
+ */
+export function delegateResultChild(result: unknown, index: number): { sessionId?: string; subagentId?: string } {
+  const record = parseMaybeObject(result)
+
+  const entries = resultRows(result)
+
+  const entry = entries.find(row => numberValue(row.task_index) === index) ??
+    (entries.every(row => row.task_index === undefined) ? entries[index] : undefined)
+
+  const listed = Array.isArray(record.subagent_ids)
+    ? record.subagent_ids.find((id): id is string => typeof id === 'string' && id.startsWith(`sa-${index}-`))
+    : undefined
+
+  return {
+    sessionId:
+      stringAt(record.child_session_ids, index) || (entry ? field(entry, 'child_session_id') : '') || undefined,
+    subagentId: listed || (entry ? field(entry, 'subagent_id') : '') || undefined
+  }
+}
+
 function dispatchedGoals(result: unknown): string[] {
   const record = parseMaybeObject(result)
 
@@ -95,6 +133,7 @@ export function delegateRowsFromCall(args: unknown, result: unknown, toolCallId 
   return titles.map((goal, index) => {
     const entry = finished[index]
     const summary = entry ? field(entry, 'summary') : ''
+    const child = delegateResultChild(result, index)
 
     return {
       activity: summary ? [summary] : [],
@@ -103,20 +142,26 @@ export function delegateRowsFromCall(args: unknown, result: unknown, toolCallId 
       goal,
       id: `${toolCallId}:${index}`,
       model: entry ? field(entry, 'model') || undefined : undefined,
-      status: entry ? settledRowStatus(field(entry, 'status')) : idle
+      sessionId: child.sessionId,
+      status: entry ? settledRowStatus(field(entry, 'status')) : idle,
+      subagentId: child.subagentId,
+      taskIndex: index
     }
   })
 }
 
-function fromSubagent(live: SubagentProgress, fallbackId: string, fallbackGoal: string): DelegateRow {
+function fromSubagent(live: SubagentProgress, row: DelegateRow): DelegateRow {
   return {
     activity: live.stream.map(entry => entry.text).filter(Boolean),
     durationSeconds: live.durationSeconds,
-    goal: live.goal || fallbackGoal,
-    id: live.id || fallbackId,
+    goal: live.goal || row.goal,
+    id: live.id || row.id,
     model: live.model,
-    sessionId: live.sessionId,
-    status: live.status
+    // The result's ids stand in while the live row has not reported its own.
+    sessionId: live.sessionId || row.sessionId,
+    status: live.status,
+    subagentId: live.id && !live.id.startsWith('delegate-tool:') ? live.id : row.subagentId,
+    taskIndex: row.taskIndex
   }
 }
 
@@ -192,10 +237,9 @@ export function mergeDelegateRows(
   const sameShape = rows.length === live.length
 
   return rows.map((row, index) => {
-    const matched =
-      byGoal[index] ?? (sameShape ? claim(c => ours(row, c) && c.taskIndex === index) : undefined)
+    const matched = byGoal[index] ?? (sameShape ? claim(c => ours(row, c) && c.taskIndex === index) : undefined)
 
-    return matched ? fromSubagent(matched, row.id, row.goal) : row
+    return matched ? fromSubagent(matched, row) : row
   })
 }
 

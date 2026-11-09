@@ -350,6 +350,8 @@ export const arAssistant = {
       statusDone: 'تم',
       resultUnavailable: 'النتيجة غير متاحة',
       resultInterrupted: 'تمت المقاطعة',
+      delegateSubagentMissing: 'لم يُعثر على الجلسة المحفوظة لهذا الوكيل الفرعي',
+      delegateReadOnly: "وكيل فرعي · سجل للقراءة فقط",
       memoryWriteNoted: 'تم تسجيل كتابة الذاكرة',
       actions: {
         read: 'قراءة',

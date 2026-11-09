@@ -3708,6 +3708,8 @@ export const ruOverrides = {
       statusDone: 'Готово',
       resultUnavailable: 'Результат недоступен',
       resultInterrupted: 'Прервано',
+      delegateSubagentMissing: 'Сохранённая сессия этого субагента не найдена',
+      delegateReadOnly: "Субагент · Переписка только для чтения",
       memoryWriteNoted: 'Запись в память отмечена',
       actions: {
         read: 'Чтение',

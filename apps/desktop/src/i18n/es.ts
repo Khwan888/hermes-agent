@@ -5232,6 +5232,8 @@ export const esOverrides = {
       statusDone: 'Listo',
       resultUnavailable: 'Resultado no disponible',
       resultInterrupted: 'Interrumpido',
+      delegateSubagentMissing: 'No se encontró la sesión guardada de este subagente',
+      delegateReadOnly: "Subagente · Transcripción de solo lectura",
       memoryWriteNoted: 'Escritura de memoria anotada',
       actions: {
         read: 'Leyó',
