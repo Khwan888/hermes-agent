@@ -11,9 +11,16 @@ import { sessionTreeKey } from '@/lib/session-branch-tree'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { $connection, sessionPinId } from '@/store/session'
 import { $expandedSessionSubagents, setSessionSubagentsExpanded } from '@/store/session-subagent-folds'
+import {
+  $subagentReadOverrides,
+  $subagentSessionRows,
+  rememberSubagentSessions,
+  subagentReadView
+} from '@/store/subagent-session-cache'
 import type { SessionInfo } from '@/types/hermes'
 
 import { SidebarSessionRow, type SidebarSessionRowProps } from './session-row'
+import { useSubagentFoldAttention } from './subagent-fold-attention'
 
 export interface SessionTreeActions {
   activeSessionId: null | string
@@ -68,18 +75,21 @@ function SessionWithSubagents({
 }: SessionWithSubagentsProps) {
   const { t } = useI18n()
   const open = useStoreSelector($expandedSessionSubagents, keys => keys.includes(foldKey))
+  const attention = useSubagentFoldAttention(owner)
 
   // Compact on purpose: the title lane keeps its width at the normal sidebar size and in long
-  // locales. The visible number is the direct-child count; the full phrase is the accessible
-  // name and the tip, so meaning never rests on the number alone.
+  // locales. The visible number is the direct-child count; the full phrase (and any attention)
+  // is the accessible name and the tip, so meaning never rests on the number or dot alone.
   const countLabel = t.sidebar.subagents.count(owner.subagent_count!)
+  const fullLabel = attention.label ? `${countLabel} · ${attention.label}` : countLabel
 
   const control = (
-    <Tip label={countLabel}>
+    <Tip label={fullLabel}>
       <Button
         aria-expanded={open}
-        aria-label={countLabel}
+        aria-label={fullLabel}
         className="tabular-nums"
+        data-subagent-attention={attention.attention}
         data-subagent-count={owner.subagent_count}
         onClick={() => setSessionSubagentsExpanded(foldKey, !open)}
         size="inline"
@@ -87,6 +97,7 @@ function SessionWithSubagents({
       >
         <DisclosureCaret open={open} />
         {owner.subagent_count}
+        {attention.dot}
       </Button>
     </Tip>
   )
@@ -161,6 +172,8 @@ type ChildrenLoad = 'more' | 'refresh'
 function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSubagentChildrenProps) {
   const { t } = useI18n()
   const h = t.sidebar.subagents
+  useStore($subagentReadOverrides)
+  useStore($subagentSessionRows)
   const [page, setPage] = useState<LoadedChildren | null>(null)
   const [loading, setLoading] = useState(true)
   // Which read failed, so Retry repeats it: a failed refresh re-reads the first page, not the next one.
@@ -203,6 +216,7 @@ function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSu
         return
       }
 
+      rememberSubagentSessions([owner, ...next.sessions])
       const reconcile = mode === 'refresh' ? refreshPage : appendPage
       const result = reconcile(pageRef.current, next)
       pageRef.current = result
@@ -275,11 +289,12 @@ function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSu
           onBranch={actions.onBranchSession ? () => actions.onBranchSession?.(session.id, session.profile) : undefined}
           onDelete={() => actions.onDeleteSession(session.id)}
           onPin={() => actions.onTogglePin(sessionPinId(session))}
-          onResume={() => actions.onResumeSession(session.id, session)}
+          // The opened page marks it read after its authorized mount (use-subagent-subject).
+          onResume={() => actions.onResumeSession(session.id, subagentReadView(session))}
           onToggleUnread={() => actions.onToggleUnread(session.id)}
-          session={session}
+          session={subagentReadView(session)}
           subagentDepth={depth}
-          unread={session.unread === true}
+          unread={subagentReadView(session).unread === true}
         />
       ))}
       {loading && (

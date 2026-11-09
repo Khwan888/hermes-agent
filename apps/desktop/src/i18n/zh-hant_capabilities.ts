@@ -117,6 +117,14 @@ export const zhHantCapabilities = {
     defaultEffort: effort => `${effort}（預設）`,
     configuredEffort: effort => `${effort}（已設定，尚未觀測）`,
     extendedTranscript: '完整記錄尾端',
+    attention: {
+      waiting: '等待你回應',
+      stuck: '暫無進展',
+      over_budget: '已達迭代次數上限',
+      unread: '未讀',
+      needsYou: (count: number) => `${count} 個需要你`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: '顯示最新 16 KiB',
     transcriptUnavailable: '即時記錄無法使用',
 

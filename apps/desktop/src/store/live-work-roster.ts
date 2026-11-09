@@ -16,6 +16,7 @@ import { lineageAliases } from './session'
 export interface LiveWorkCounts {
   background: number
   subagents: number
+  attention?: { waiting: number; stuck: number }
 }
 
 export interface LiveWorkBucket {
@@ -63,7 +64,18 @@ export function setLiveWorkRosterSource(
       continue
     }
 
-    bucket[sid] = { background: Number(row.background) || 0, subagents: Number(row.subagents) || 0 }
+    const raw = row.attention as Record<string, unknown> | undefined
+
+    const count = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0
+
+    const waiting = count(raw?.waiting)
+    const stuck = count(raw?.stuck)
+    bucket[sid] = {
+      background: Number(row.background) || 0,
+      subagents: Number(row.subagents) || 0,
+      ...(waiting || stuck ? { attention: { waiting, stuck } } : {})
+    }
   }
 
   $liveWorkRoster.set({ ...current, [source]: { at, covers: new Set(covers), sessions: bucket } })
@@ -77,7 +89,7 @@ export function setLiveWorkRosterSource(
  *  the roster saw start since. */
 export function rosterLiveIds(
   roster: LiveWorkRoster,
-  kind: keyof LiveWorkCounts,
+  kind: 'background' | 'subagents',
   eventFedAt: ReadonlyMap<string, number>,
   sessions: Parameters<typeof lineageAliases>[1]
 ): string[] {
@@ -112,7 +124,7 @@ export function rosterLiveIds(
  *  its event-fed state. */
 export function rosterSaysIdle(
   roster: LiveWorkRoster,
-  kind: keyof LiveWorkCounts,
+  kind: 'background' | 'subagents',
   aliases: readonly string[],
   eventAt: number
 ): boolean {

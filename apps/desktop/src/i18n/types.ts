@@ -2071,6 +2071,15 @@ export interface Translations extends NoticeTranslations {
     /** Configured effort shown before any request on the route was observed. */
     configuredEffort: (effort: string) => string
     extendedTranscript: string
+    /** Attention shown on existing subagent rows. */
+    attention: {
+      waiting: string
+      stuck: string
+      over_budget: string
+      unread: string
+      needsYou: (count: number) => string
+      count: (count: number, label: string) => string
+    }
     transcriptTruncated: string
     transcriptUnavailable: string
     close: string

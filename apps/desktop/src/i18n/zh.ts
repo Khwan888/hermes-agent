@@ -2221,6 +2221,14 @@ export const zhOverrides = {
     defaultEffort: effort => `${effort}（默认）`,
     configuredEffort: effort => `${effort}（已配置，尚未观测）`,
     extendedTranscript: '扩展记录',
+    attention: {
+      waiting: '等待你回应',
+      stuck: '暂无进展',
+      over_budget: '已达迭代次数上限',
+      unread: '未读',
+      needsYou: (count: number) => `${count} 个需要你`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: '显示最新 16 KiB',
     transcriptUnavailable: '实时记录不可用',
 

@@ -16,6 +16,7 @@ import { Tip, TipKeybindLabel, Tooltip, TooltipContent, TooltipProvider, Tooltip
 import { ContribRender } from '@/contrib/react/boundary'
 import { useI18n } from '@/i18n'
 import { useKeybindHint } from '@/lib/keybinds/use-keybind-hint'
+import type { SubagentAttention } from '@/lib/subagent-attention'
 import { cn } from '@/lib/utils'
 import {
   $statusbarHiddenIds,
@@ -57,6 +58,8 @@ export interface StatusbarMenuItem {
 
 export interface StatusbarItem {
   id: string
+  /** Only the Agents live-wait flag may override a hidden preference. */
+  subagentAttention?: SubagentAttention
   /** Escape hatch: render an arbitrary node into the bar (own state, tooltip,
    *  events). When set, it OWNS the slot — label/variant/onSelect are ignored.
    *  This is how a plugin drops a full stateful React component into the bar. */
@@ -106,7 +109,11 @@ export function StatusbarControls({ className, leftItems = [], items = [], ...pr
   const hiddenIds = useStore($statusbarHiddenIds)
 
   const visible = (item: StatusbarItem) =>
-    !item.hidden && (item.lockedVisible || !item.toggleLabel || !hiddenIds.includes(item.id))
+    !item.hidden &&
+    ((item.id === 'agents' && (item.subagentAttention === 'waiting' || item.subagentAttention === 'stuck')) ||
+      item.lockedVisible ||
+      !item.toggleLabel ||
+      !hiddenIds.includes(item.id))
 
   return (
     <ContextMenu>
@@ -354,6 +361,7 @@ const StatusbarItemView = memo(function StatusbarItemView({
     <Tip label={tooltipLabel}>
       <button
         className={cn(STATUSBAR_ACTION_CLASS, item.className)}
+        data-subagent-attention={item.subagentAttention}
         disabled={item.disabled}
         onClick={event => {
           if (item.to) {

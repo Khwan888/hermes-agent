@@ -41,7 +41,6 @@ import { cacheHitLabel, contextBarLabel, LiveDuration, tokensPerSecondLabel, usa
 import { rollbackSentence } from '@/lib/update-copy'
 import { formatPercentUsed, formatResetsIn } from '@/lib/usage-percent'
 import { useStoreSelector } from '@/lib/use-session-slice'
-import { cn } from '@/lib/utils'
 import { resolveVersionStatus } from '@/lib/version-status'
 import { requestGatewayForActiveRoute } from '@/store/active-route-request'
 import type { ApprovalModeRequester } from '@/store/approval-mode'
@@ -85,6 +84,8 @@ import type { FreeTierStatus, StatusResponse, UsageStats } from '@/types/hermes'
 import { useSubagentPage } from '../../chat/use-subagent-page'
 import { CRON_ROUTE, SETTINGS_ROUTE, WEBHOOKS_ROUTE } from '../../routes'
 import type { StatusbarItem } from '../statusbar-controls'
+
+import { useAgentsStatusbarItem } from './use-agents-statusbar-item'
 
 const EMPTY_USAGE: UsageStats = { calls: 0, input: 0, output: 0, total: 0 }
 
@@ -194,6 +195,8 @@ export function useStatusbarItems({
       .filter(([sid]) => sid === primaryActiveSessionId)
       .reduce((sum, [, items]) => sum + failedSubagentCount(items), 0)
   )
+
+  const agentsItem = useAgentsStatusbarItem(agentsOpen, openAgents, subagentsRunning, subagentsFailed)
 
   // Backend truth for the free-tier chip. Refreshed on the ambient status
   // cadence (use-status-snapshot), never polled from here.
@@ -624,32 +627,7 @@ export function useStatusbarItems({
         toggleLabel: copy.toggleWorkspace,
         variant: 'menu'
       },
-      {
-        className: cn(
-          agentsOpen && 'bg-accent/55 text-foreground',
-          subagentsFailed > 0 && 'text-destructive hover:text-destructive'
-        ),
-        detail:
-          subagentsRunning > 0
-            ? copy.subagents(subagentsRunning)
-            : subagentsFailed > 0
-              ? copy.failed(subagentsFailed)
-              : undefined,
-        icon:
-          subagentsFailed > 0 ? (
-            <AlertCircle className="size-3" />
-          ) : subagentsRunning > 0 ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <Codicon name="hubot" size="0.75rem" />
-          ),
-        id: 'agents',
-        label: copy.agents,
-        onSelect: openAgents,
-        title: agentsOpen ? copy.closeAgents : copy.openAgents,
-        toggleLabel: copy.agents,
-        variant: 'action'
-      },
+      agentsItem,
       {
         icon: <Clock className="size-3" />,
         id: 'cron',
@@ -668,7 +646,7 @@ export function useStatusbarItems({
       }
     ],
     [
-      agentsOpen,
+      agentsItem,
       botsShowing,
       changeWorkspaceItem,
       commandCenterOpen,
@@ -688,12 +666,9 @@ export function useStatusbarItems({
       gatewayRestarting,
       inferenceReady,
       inferenceStatus?.reason,
-      openAgents,
       profileRailVisible,
       projectName,
       sessionsShowing,
-      subagentsFailed,
-      subagentsRunning,
       toggleCommandCenter
     ]
   )

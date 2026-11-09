@@ -2649,6 +2649,14 @@ export const esOverrides = {
     defaultEffort: effort => `${effort} (predeterminado)`,
     configuredEffort: effort => `${effort} (configurado, aún no observado)`,
     extendedTranscript: 'Transcripción ampliada',
+    attention: {
+      waiting: 'Esperando tu respuesta',
+      stuck: 'Sin progreso',
+      over_budget: 'Límite de iteraciones alcanzado',
+      unread: 'Sin leer',
+      needsYou: (count: number) => `${count} te necesitan`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: 'Mostrando los últimos 16 KiB',
     transcriptUnavailable: 'Transcripción en vivo no disponible',
     close: 'Cerrar agentes',

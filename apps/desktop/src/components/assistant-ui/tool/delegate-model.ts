@@ -1,3 +1,4 @@
+import { subagentAttention, type SubagentAttention } from '@/lib/subagent-attention'
 import { firstStringField, normalize } from '@/lib/text'
 import type { SubagentProgress, SubagentStatus } from '@/store/subagents'
 
@@ -12,6 +13,7 @@ import { numberValue, parseMaybeObject } from './fallback-model'
 export interface DelegateRow {
   /** Latest relayed activity, oldest → newest. The card tickers the tail. */
   activity: string[]
+  attention?: SubagentAttention
   durationSeconds?: number
   goal: string
   id: string
@@ -153,6 +155,7 @@ export function delegateRowsFromCall(args: unknown, result: unknown, toolCallId 
 function fromSubagent(live: SubagentProgress, row: DelegateRow): DelegateRow {
   return {
     activity: live.stream.map(entry => entry.text).filter(Boolean),
+    attention: subagentAttention(live),
     durationSeconds: live.durationSeconds,
     goal: live.goal || row.goal,
     id: live.id || row.id,

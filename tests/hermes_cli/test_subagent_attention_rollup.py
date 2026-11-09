@@ -84,6 +84,18 @@ def test_one_session_read_carries_the_same_roll_up_and_subagent_rows_say_they_ar
     assert api.get("/api/sessions/alpha").json()["unread"] is False
 
 
+def test_timeout_remains_unread_without_counting_as_iteration_budget_exhaustion(client):
+    api, home = client
+    with SessionDB(db_path=home / "state.db") as db:
+        db.create_session("timed-out", source="subagent", parent_session_id="root")
+        db.append_message("timed-out", "user", "Slow tool")
+        db.end_session("timed-out", "subagent_timeout")
+        db.set_session_read("timed-out", False)
+    rows = _rows(api, "/api/sessions?limit=50")
+    assert rows["root"]["subagent_attention"] == {"unread": 3, "over_budget": 1}
+    assert _rows(api, "/api/sessions/root/subagents")["beta"]["subagent_attention"] == {"unread": 1, "over_budget": 1}
+
+
 def test_one_page_costs_one_roll_up_query(client, monkeypatch):
     from hermes_cli import session_listing
 

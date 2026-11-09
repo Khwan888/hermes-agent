@@ -54,6 +54,25 @@ afterEach(() => {
   $activeSessionId.set(null)
 })
 
+describe('delegate attention', () => {
+  it.each([
+    [{ attention: 'waiting' }, 'waiting', 'Waiting on you'],
+    [{ attention: 'stuck' }, 'stuck', 'No progress'],
+    [{ status: 'completed', exit_reason: 'max_iterations' }, 'over_budget', 'Over budget']
+  ])('flags a live card row with %j', (payload, state, label) => {
+    upsertSubagent(SESSION, { subagent_id: 'delegate-tool:call-1:0', goal: 'Inspect the delegate card', ...payload })
+    const { container } = renderCard()
+    expect(container.querySelector('[data-subagent-attention]')?.getAttribute('data-subagent-attention')).toBe(state)
+    expect(container.textContent).toContain(label)
+  })
+
+  it('adds no flag or chip for a subagent with no attention', () => {
+    const { container } = renderCard()
+    expect(container.querySelector('[data-subagent-attention]')).toBeNull()
+    expect(container.querySelector('[data-slot="badge"]')).toBeNull()
+  })
+})
+
 describe('delegate card fade', () => {
   // Scaffold opacity opens a stacking context. The activity ticker is a
   // transformed reel clipped to one line; when the mark sat on the wrapper

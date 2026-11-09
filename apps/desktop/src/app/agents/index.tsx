@@ -4,12 +4,14 @@ import { Fragment, type ReactNode, useEffect, useMemo, useState } from 'react'
 
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
+import { SubagentAttentionChip } from '@/components/chat/subagent-attention-chip'
 import { usePaneVisible } from '@/components/pane-shell/pane-visibility'
 import { Codicon } from '@/components/ui/codicon'
 import { FadeText } from '@/components/ui/fade-text'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertCircle, CheckCircle2 } from '@/lib/icons'
+import { subagentAttention } from '@/lib/subagent-attention'
 import { subagentRouteSubtitle } from '@/lib/subagent-route'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
@@ -352,6 +354,7 @@ export function SubagentRow({
   parentSessionId?: string
 }) {
   const { t } = useI18n()
+  const attention = subagentAttention(node)
   const running = node.status === 'running' || node.status === 'queued'
   const elapsed = useElapsedSeconds(running, `subagent:${node.id}`, node.startedAt)
 
@@ -384,6 +387,7 @@ export function SubagentRow({
       data-parent-session-id={parentSessionId ?? node.parentSessionId}
       data-session-id={node.sessionId}
       data-slot="tool-block"
+      data-subagent-attention={attention}
       data-subagent-id={node.id}
       data-subagent-status={node.status}
       ref={enterRef}
@@ -404,6 +408,7 @@ export function SubagentRow({
           >
             {node.goal}
           </span>
+          <SubagentAttentionChip attention={attention} />
           {subtitle.length > 0 ? (
             <FadeText className="text-[0.66rem] leading-[1.05rem] text-muted-foreground" title={subtitle.join(' · ')}>
               {subtitle.join(' · ')}

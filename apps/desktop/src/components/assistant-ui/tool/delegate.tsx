@@ -8,6 +8,7 @@ import { openSubagentForCall } from '@/app/open-subagent'
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
 import { SCAFFOLD_GLYPH_CLASS, SCAFFOLD_LABEL_CLASS, SCAFFOLD_META_CLASS } from '@/components/chat/scaffold-row'
+import { SubagentAttentionChip } from '@/components/chat/subagent-attention-chip'
 import { Codicon } from '@/components/ui/codicon'
 import { FadeText } from '@/components/ui/fade-text'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
@@ -27,6 +28,7 @@ import {
 } from './delegate-model'
 import { formatDurationSeconds, type ToolPart } from './fallback-model'
 import { ToolRunTicker } from './run-ticker'
+import { useStoredSubagentAttention } from './use-stored-subagent-attention'
 
 // Activity lines kept mounted behind the visible one. Enough for the reel to
 // read as motion, few enough that a chatty child doesn't hold a hundred rows
@@ -71,6 +73,8 @@ function DelegateRowView({ row, toolCallId }: { row: DelegateRow; toolCallId?: s
   const { t } = useI18n()
   const copy = t.assistant.tool
   const { sessionId } = row
+  const persistedAttention = useStoredSubagentAttention(sessionId, parentRuntimeId, row.status === 'dispatched')
+  const attention = row.attention ?? persistedAttention
   const live = isDelegateRowLive(row.status)
   const elapsed = useElapsedSeconds(live, `delegate:${row.id}`)
   const activity = row.activity.slice(-TICKER_DEPTH)
@@ -116,6 +120,7 @@ function DelegateRowView({ row, toolCallId }: { row: DelegateRow; toolCallId?: s
       className="grid min-w-0 max-w-full gap-0.5 rounded-xl border border-(--ui-stroke-tertiary) px-3 py-2"
       data-parent-session-id={parentSessionId ?? undefined}
       data-session-id={sessionId}
+      data-subagent-attention={attention}
       data-subagent-id={row.subagentId}
       data-subagent-status={row.status}
     >
@@ -133,6 +138,7 @@ function DelegateRowView({ row, toolCallId }: { row: DelegateRow; toolCallId?: s
         >
           {row.goal}
         </button>
+        <SubagentAttentionChip attention={attention} />
         {meta.length > 0 && <span className={SCAFFOLD_META_CLASS}>{meta.join(' · ')}</span>}
         {live && <ActivityTimerText className={cn(SCAFFOLD_META_CLASS, 'ml-auto')} seconds={elapsed} />}
         <Codicon className="ml-auto shrink-0 text-(--conversation-scaffold-text)" name="agent" size="0.625rem" />

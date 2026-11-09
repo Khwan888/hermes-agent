@@ -2291,6 +2291,14 @@ export const en: Translations = {
     defaultEffort: effort => `${effort} (default)`,
     configuredEffort: effort => `${effort} (configured, not yet observed)`,
     extendedTranscript: 'Extended transcript',
+    attention: {
+      waiting: 'Waiting on you',
+      stuck: 'No progress',
+      over_budget: 'Over budget',
+      unread: 'Unread',
+      needsYou: (count: number) => `${count} need you`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: 'Showing the latest 16 KiB',
     transcriptUnavailable: 'Live transcript unavailable',
 

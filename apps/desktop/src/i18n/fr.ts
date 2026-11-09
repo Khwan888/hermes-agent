@@ -2668,6 +2668,14 @@ export const frOverrides = {
     defaultEffort: effort => `${effort} (par défaut)`,
     configuredEffort: effort => `${effort} (configuré, pas encore observé)`,
     extendedTranscript: 'Transcription étendue',
+    attention: {
+      waiting: 'En attente de vous',
+      stuck: 'Aucun progrès',
+      over_budget: 'Limite d’itérations atteinte',
+      unread: 'Non lu',
+      needsYou: (count: number) => `${count} ont besoin de vous`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: 'Affichage des 16 Kio les plus récents',
     transcriptUnavailable: 'Transcription en direct indisponible',
     close: 'Fermer les agents',

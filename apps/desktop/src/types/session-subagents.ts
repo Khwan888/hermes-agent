@@ -6,6 +6,8 @@ export interface SessionSubagentInfo {
   is_internal_child?: boolean
   /** Direct delegate children across this conversation's compression lineage. */
   subagent_count?: number
+  end_reason?: null | string
+  subagent_attention?: { unread?: number; over_budget?: number }
   /** Durable delegate parent, when projected by the backend. */
   _delegate_from?: null | string
 }

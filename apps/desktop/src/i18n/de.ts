@@ -2659,6 +2659,14 @@ export const deOverrides = {
     defaultEffort: effort => `${effort} (Standard)`,
     configuredEffort: effort => `${effort} (konfiguriert, noch nicht beobachtet)`,
     extendedTranscript: 'Extended Transcript',
+    attention: {
+      waiting: 'Wartet auf dich',
+      stuck: 'Kein Fortschritt',
+      over_budget: 'Iterationslimit erreicht',
+      unread: 'Ungelesen',
+      needsYou: (count: number) => `${count} brauchen dich`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: 'Zeigt die letzten 16 KiB',
     transcriptUnavailable: 'Live-Transcript nicht verfügbar',
     close: 'Agents schließen',

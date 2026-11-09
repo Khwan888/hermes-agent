@@ -431,8 +431,10 @@ export function setSessionPinnedRemote(id: string, pinned: boolean, profile?: st
   return mutateSessionHttp(id, 'PATCH', { pinned }, sessionWriteProfile(profile))
 }
 
-export function setSessionUnreadRemote(id: string, unread: boolean, profile?: string | null): Promise<{ ok: boolean }> {
-  return mutateSessionHttp(id, 'PATCH', { unread }, sessionWriteProfile(profile))
+export function setSessionUnreadRemote(id: string, unread: boolean, profile?: string | null, connectionId?: string | null): Promise<{ ok: boolean }> {
+  const ownerProfile = sessionWriteProfile(profile)
+
+  return mutateSessionHttp(id, 'PATCH', { unread }, connectionId ? { profile: ownerProfile, connectionId } : ownerProfile)
 }
 
 // Full-text search over one profile's sessions. Pass the profile the caller is

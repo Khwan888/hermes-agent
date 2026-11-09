@@ -73,6 +73,14 @@ export const arCapabilities = {
     defaultEffort: effort => `${effort} (افتراضي)`,
     configuredEffort: effort => `${effort} (مُعدّ، لم يُرصد بعد)`,
     extendedTranscript: 'سجل موسّع',
+    attention: {
+      waiting: 'بانتظارك',
+      stuck: 'لا يوجد تقدم',
+      over_budget: 'تم بلوغ حد التكرارات',
+      unread: 'غير مقروء',
+      needsYou: (count: number) => `${count} بحاجة إليك`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: 'عرض أحدث 16 KiB',
     transcriptUnavailable: 'السجل المباشر غير متاح',
 

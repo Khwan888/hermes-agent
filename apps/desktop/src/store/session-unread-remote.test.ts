@@ -77,6 +77,14 @@ describe('clearUnreadOnOpen', () => {
     expect($sessions.get().find(s => s.id === 'a')?.unread).toBe(false)
   })
 
+  it('leaves an unread subagent to its opened page: a click-time PATCH is refused before mount', async () => {
+    $sessions.set([row('child', { source: 'subagent', parent_session_id: 'p', unread: true })])
+
+    await clearUnreadOnOpen('child')
+
+    expect(patch).not.toHaveBeenCalled()
+  })
+
   it('swallows a failed PATCH (the next honest refresh heals the dot)', async () => {
     $sessions.set([row('a', { unread: true })])
     patch.mockImplementationOnce(() => Promise.reject(new Error('offline')))

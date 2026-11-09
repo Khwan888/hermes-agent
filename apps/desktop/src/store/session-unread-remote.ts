@@ -22,8 +22,10 @@
 import { atom } from 'nanostores'
 
 import { setSessionUnreadRemote } from '@/hermes'
+import { isSubagentSession } from '@/lib/session-branch-tree'
 
 import { $sessions, setSessions } from './session'
+import { knownSubagent } from './subagent-unread'
 
 export const UNREAD_WRITE_GUARD_MS = 10_000
 
@@ -67,7 +69,9 @@ export async function markSessionUnread(storedId: string, unread: boolean): Prom
 export async function clearUnreadOnOpen(storedId: string): Promise<void> {
   const row = rowFor(storedId)
 
-  if (!row || row.unread !== true) {
+  // A subagent's read-state write is authorized only after its page mounts the child, so its
+  // opened page marks it read (use-subagent-subject); a click-time PATCH here is refused (403).
+  if (!row || knownSubagent(storedId) || isSubagentSession(row) || row.unread !== true) {
     return
   }
 

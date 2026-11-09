@@ -14,12 +14,23 @@ export function broadcastSessionsChanged(): void {
   channel?.postMessage(1)
 }
 
+const localHandlers = new Set<() => void>()
+
+/** A store-level write (no hook in reach) that changed list projections the
+ *  backend computes — e.g. a subagent marked read lowers its ancestors'
+ *  roll-ups. Re-pull here (a newer list request voids any page already in
+ *  flight, which may predate the write) and in every other window. */
+export function sessionsChangedHere(): void {
+  localHandlers.forEach(handler => handler())
+  broadcastSessionsChanged()
+}
+
 export function onSessionsChanged(handler: () => void): () => void {
-  if (!channel) {
-    return () => {}
+  localHandlers.add(handler)
+  channel?.addEventListener('message', handler)
+
+  return () => {
+    localHandlers.delete(handler)
+    channel?.removeEventListener('message', handler)
   }
-
-  channel.addEventListener('message', handler)
-
-  return () => channel.removeEventListener('message', handler)
 }

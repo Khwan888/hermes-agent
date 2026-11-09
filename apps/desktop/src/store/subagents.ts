@@ -3,6 +3,8 @@ import { atom } from 'nanostores'
 
 import { capitalize } from '@/lib/text'
 
+import { subagentAttentionFields } from './subagent-attention'
+
 export type SubagentStatus = 'completed' | 'failed' | 'interrupted' | 'queued' | 'running'
 export type SubagentStreamKind = 'progress' | 'summary' | 'thinking' | 'tool'
 
@@ -27,6 +29,11 @@ export interface SubagentProgress {
   model?: string
   route?: SubagentRoute
   usage?: SubagentUsage | null
+  attention?: 'waiting' | 'stuck'
+  attentionReason?: string
+  attentionSince?: number
+  exitReason?: string
+  unread?: boolean
   status: SubagentStatus
   taskCount: number
   taskIndex: number
@@ -269,6 +276,7 @@ function toProgress(
   return {
     ...routeFields(payload, prev, parentSessionId),
     usage: payload.usage === undefined ? prev?.usage : (payload.usage as SubagentUsage | null),
+    ...subagentAttentionFields(payload, prev, status, eventType),
     id: prev?.id ?? idOf(payload),
     parentId: str(payload.parent_id) || prev?.parentId || null,
     goal: str(payload.goal) || prev?.goal || 'Subagent',

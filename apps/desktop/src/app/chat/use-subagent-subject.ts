@@ -3,10 +3,13 @@ import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
 import { $sessions, sessionMatchesStoredId } from '@/store/session'
-import { requestForOwnedSession } from '@/store/session-states'
+import { knownOwnerForSession, requestForOwnedSession } from '@/store/session-states'
+import { clearSubagentUnreadOnOpen } from '@/store/subagent-unread'
 import { isWatchWindow } from '@/store/windows'
 
 import { useSubagentPage } from './use-subagent-page'
+
+const READ_ATTEMPTS = 3
 
 interface SubagentSubjectState {
   subject: SubagentSnapshot | null
@@ -39,7 +42,23 @@ export function useSubagentSubject(sessionId: string | null, storedId: string | 
     let active = true
     let failures = 0
     let again = true
+    let read = false
     let timer: ReturnType<typeof setTimeout>
+
+    // The backend authorizes a child's read-state write only once this page has mounted it, so a
+    // click-time PATCH is refused (403). Mark read from the opened page after its subject resolves,
+    // once: later background polls must not acknowledge newer work. The child was seen, so the
+    // write completes even if the user has already moved on; a refused write retries briefly and
+    // otherwise leaves the unread flag visible for the next open.
+    const owner = knownOwnerForSession(sessionId)
+
+    const markRead = async (childId: string, parentId: string | null | undefined, attempt = 1) => {
+      const done = await clearSubagentUnreadOnOpen(childId, parentId, owner)
+
+      if (!done && attempt < READ_ATTEMPTS) {
+        setTimeout(() => void markRead(childId, parentId, attempt + 1), 1000)
+      }
+    }
 
     const poll = async () => {
       try {
@@ -54,6 +73,14 @@ export function useSubagentSubject(sessionId: string | null, storedId: string | 
 
         failures = 0
         again = result.available
+
+        if (!read && result.subagent) {
+          read = true
+          void markRead(
+            storedId ?? result.subagent.child_session_id ?? sessionId,
+            result.parent_session_id ?? row?.parent_session_id
+          )
+        }
 
         if (active) {
           setState(previous => ({

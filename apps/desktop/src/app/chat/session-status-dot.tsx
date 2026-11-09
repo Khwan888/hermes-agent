@@ -134,7 +134,7 @@ export function SessionStatusDot({ storedSessionId, session, branchStem, classNa
   // Selector, not a plain useStore: the map is rebuilt whenever any session's
   // status changes, but a given dot only repaints when ITS OWN state flips.
   const dotState = useStoreSelector($sessionDotStateById, states =>
-    storedSessionId ? (states[storedSessionId] ?? 'idle') : 'draft'
+    storedSessionId ? (states[storedSessionId] ?? (session?.unread ? 'unread' : 'idle')) : 'draft'
   )
 
   const variant = DOT_VARIANTS[dotState]

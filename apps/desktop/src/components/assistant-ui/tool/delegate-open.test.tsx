@@ -2,12 +2,16 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { atom } from 'nanostores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import * as sessionApi from '@/api/sessions'
 import { type SessionView, SessionViewProvider } from '@/app/chat/session-view'
 import { I18nProvider } from '@/i18n/context'
 import type { ChatMessage } from '@/lib/chat-messages'
+import * as sessionOwners from '@/store/session-states'
 import type * as SessionStatesStore from '@/store/session-states'
+import { $subagentReadOverrides } from '@/store/subagent-session-cache'
 import { $subagentsBySession, clearSessionSubagents, upsertSubagent } from '@/store/subagents'
 import type * as WindowsStore from '@/store/windows'
+import type { SessionInfo } from '@/types/hermes'
 
 import { DelegateTool } from './delegate'
 
@@ -100,9 +104,33 @@ afterEach(() => {
   cleanup()
   clearSessionSubagents(RUNTIME)
   $subagentsBySession.set({})
+  $subagentReadOverrides.set({})
   vi.restoreAllMocks()
 })
 
+it('keeps persisted unread on a parked card after the completion turn prunes the live roster', async () => {
+  vi.spyOn(sessionOwners, 'knownOwnerForSession').mockReturnValue('default')
+
+  const get = vi.spyOn(sessionApi, 'getSession').mockResolvedValue({
+    id: 'stored-alpha',
+    parent_session_id: 'stored-parent',
+    ended_at: 2,
+    unread: true,
+    started_at: 1,
+    last_active: 2,
+    profile: 'default'
+  } as SessionInfo)
+
+  const { container } = renderCard({
+    status: 'dispatched',
+    child_session_ids: ['stored-alpha', null],
+    subagent_ids: ['sa-0-a']
+  })
+
+  const row = container.querySelector('[data-session-id="stored-alpha"]')!
+  await waitFor(() => expect(row.getAttribute('data-subagent-attention')).toBe('unread'))
+  expect(get).toHaveBeenCalledWith('stored-alpha', { profile: 'default', connectionId: undefined })
+})
 describe('delegate card opens its subagent forever', () => {
   it('opens a finished subagent from the ids its call result names, as a full page beside the parent', async () => {
     locate.reply = { children: [{ task_index: 1, child_session_id: 'child-beta', running: false }] }

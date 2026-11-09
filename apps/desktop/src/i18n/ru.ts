@@ -1588,6 +1588,14 @@ export const ruOverrides = {
     defaultEffort: effort => `${effort} (по умолчанию)`,
     configuredEffort: effort => `${effort} (настроено, ещё не подтверждено)`,
     extendedTranscript: 'Подробный журнал',
+    attention: {
+      waiting: 'Ждёт вас',
+      stuck: 'Нет прогресса',
+      over_budget: 'Лимит итераций исчерпан',
+      unread: 'Не прочитано',
+      needsYou: (count: number) => `Нуждаются в вас: ${count}`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: 'Последние 16 КиБ',
     transcriptUnavailable: 'Текущий журнал недоступен',
 

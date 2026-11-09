@@ -1427,6 +1427,14 @@ export const jaOverrides = {
     defaultEffort: effort => `${effort}（デフォルト）`,
     configuredEffort: effort => `${effort}（設定値・未確認）`,
     extendedTranscript: '詳細な実行ログ',
+    attention: {
+      waiting: '返答待ち',
+      stuck: '進捗なし',
+      over_budget: '反復回数の上限に到達',
+      unread: '未読',
+      needsYou: (count: number) => `${count} 件が対応待ち`,
+      count: (count: number, label: string) => `${count} · ${label}`
+    },
     transcriptTruncated: '最新の 16 KiB を表示',
     transcriptUnavailable: 'ライブログは利用できません',
 
