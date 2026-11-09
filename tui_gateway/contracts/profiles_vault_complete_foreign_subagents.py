@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
-from .common import OpenModel, ProfileParams, SessionParams, SubagentStatus
+from .common import OpenModel, ProfileParams, SessionParams, SubagentRoute, SubagentStatus
 from .config_free_tier_control import ModelOptionProvider
 from .registry import method
 
@@ -658,7 +658,7 @@ method("session.foreign.import", params=SessionForeignIdParams, result=SessionFo
 
 
 class SubagentSnapshot(Result):
-    """``methods_subagents._SUBAGENT_SNAPSHOT_FIELDS`` projection of one live child record."""
+    """``gateway.session_ancillary.subagent_row`` projection of one live child record."""
 
     subagent_id: str
     parent_id: str | None = None
@@ -666,6 +666,7 @@ class SubagentSnapshot(Result):
     goal: str | None = None
     delegation_id: str | None = None
     model: str | None = None
+    route: SubagentRoute | None = None
     started_at: float | None = None
     status: SubagentStatus | None = None
     tool_count: int | None = None

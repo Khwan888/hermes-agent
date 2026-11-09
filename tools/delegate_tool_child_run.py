@@ -77,19 +77,21 @@ def _tier_in_effect(child: Any) -> Any:
 
 
 def _route_report(child: Any) -> Optional[dict[str, Any]]:
-    """What a backend-routed child actually ran on: its backend and label plus the provider, model, reasoning effort
-    (None = the provider's default) and speed tier read off the child when its result is assembled, so a fallback
-    provider that took over shows (``fallback_activated``). None for the default backend's unlabelled route."""
+    """Backend label plus the child's current route and speed tier, read at result time so
+    fallback is visible. Effort is the observed one (unknown stays None); a child that sent
+    no request on its current route reports its configured effort, as before.
+    None for the default backend's unlabelled route.
+    """
     route = getattr(child, "_delegate_route", None)
     if not isinstance(route, dict):
         return None
     from agent.fast_mode import service_tier_word
-    reasoning = getattr(child, "reasoning_config", None)
-    effort = None
-    if isinstance(reasoning, dict):
-        effort = reasoning.get("effort") if reasoning.get("enabled", True) else "none"
-    return {**route, "provider": _str_or_none(getattr(child, "provider", None)),
-            "model": _str_or_none(getattr(child, "model", None)), "reasoning_effort": _str_or_none(effort),
+    from agent.runtime_route import runtime_route
+
+    actual = runtime_route(child)
+    effort = actual["effective_effort"] if actual["observed"] else actual["requested_effort"]
+    return {**route, "provider": actual["provider"],
+            "model": actual["model"], "reasoning_effort": effort,
             "service_tier": service_tier_word(_tier_in_effect(child)),
             **({"fallback_activated": True} if getattr(child, "_fallback_activated", False) is True else {})}
 
@@ -424,8 +426,11 @@ def _register_child(
     if owner_session_id and (owner_transport is None or owner_session_record is None):
         owner_transport, owner_session_record = _capture_gateway_steer_authority(owner_session_id)
     _raw_depth = getattr(child, "_delegate_depth", 1)
+    from agent.runtime_route import runtime_route
+
     _register_subagent({
         "subagent_id": _subagent_id,
+        "route": runtime_route(child),
         "parent_id": _str_or_none(getattr(child, "_parent_subagent_id", None)),
         "depth": max(0, _raw_depth - 1) if isinstance(_raw_depth, int) else 0,
         "goal": goal,

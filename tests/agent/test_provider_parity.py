@@ -88,6 +88,135 @@ def _make_agent(monkeypatch, provider, api_mode="chat_completions", base_url="ht
 
 # ── _build_api_kwargs tests ─────────────────────────────────────────────────
 
+def _dispatch_one_turn_request(monkeypatch, agent, *, request_middleware=None, execution_middleware=None):
+    """Build and dispatch one request through the real turn path (request assembly, request
+    middleware, execution middleware) into a real OpenAI SDK client on httpx.MockTransport.
+    Returns the JSON body the SDK actually encoded. No socket or provider is contacted."""
+    import httpx
+    from openai import OpenAI
+
+    from agent.turn_api_call import perform_api_call
+    from agent.turn_api_request import build_request_payload
+
+    sent = []
+
+    def receive(request):
+        body = json.loads(request.content)
+        sent.append(body)
+        return httpx.Response(200, request=request, json={
+            "id": "offline", "object": "chat.completion", "created": 0, "model": body["model"],
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+        })
+
+    client = OpenAI(api_key="synthetic", base_url="http://127.0.0.1:8080/v1",
+                    http_client=httpx.Client(transport=httpx.MockTransport(receive)), max_retries=0)
+    monkeypatch.setattr(agent, "_interruptible_api_call", lambda kwargs: client.chat.completions.create(**kwargs))
+    agent._disable_streaming = True
+    agent._empty_content_retries = 0  # per-turn state run_conversation initializes
+    if request_middleware is not None:
+        monkeypatch.setattr("hermes_cli.plugins.has_middleware", lambda kind: kind == "llm_request")
+        monkeypatch.setattr("hermes_cli.plugins.invoke_middleware",
+                            lambda kind, **kw: [{"request": request_middleware(dict(kw["request"]))}])
+    if execution_middleware is not None:
+        monkeypatch.setattr("hermes_cli.middleware.run_llm_execution_middleware",
+                            lambda request, next_call, **_ctx: next_call(execution_middleware(dict(request))))
+    messages = [{"role": "user", "content": "hi"}]
+    built = build_request_payload(
+        agent, api_messages=messages, _moa_prepared_request=None, tools_for_api=agent.tools,
+        system_message="", api_call_count=0, api_request_id="offline-request",
+        effective_task_id="offline-task", turn_id="offline-turn")
+    perform_api_call(
+        agent, api_kwargs=built.api_kwargs, _original_api_kwargs=built._original_api_kwargs,
+        _llm_middleware_trace=built._llm_middleware_trace, _moa_prepared_request=None, _retry=SimpleNamespace(),
+        thinking_spinner=None, retry_count=0, api_call_count=0, api_request_id="offline-request",
+        effective_task_id="offline-task", turn_id="offline-turn", interrupted=False)
+    client.close()
+    assert len(sent) == 1
+    return sent[0]
+
+
+def _without_reasoning(request):
+    request.pop("reasoning_effort", None)
+    extra = dict(request.get("extra_body") or {})
+    for key in ("reasoning", "reasoning_effort", "thinking", "enable_thinking"):
+        extra.pop(key, None)
+    request["extra_body"] = extra
+    return request
+
+
+@pytest.mark.parametrize("configured, expected, source", [
+    (None, "medium", "default"),
+    ({"enabled": True, "effort": "ultra"}, "max", "configured"),
+    ({"enabled": False}, "none", "configured"),
+])
+def test_subagent_route_reports_the_effort_that_the_sdk_actually_sent(monkeypatch, configured, expected, source):
+    from agent.runtime_route import runtime_route
+
+    agent = _make_agent(monkeypatch, "custom:relay", base_url="http://127.0.0.1:8080/v1", model="moonshotai/kimi-k3")
+    agent.reasoning_config = configured
+    sent = _dispatch_one_turn_request(monkeypatch, agent)
+    assert sent["reasoning_effort"] == expected
+    route = runtime_route(agent)
+    assert route["model"] == sent["model"] == "moonshotai/kimi-k3"
+    assert route["wire_effort"] == expected
+    assert route["effective_effort"] == expected
+    assert route["effort_source"] == source
+    assert route["reasoning_status"] == ("disabled" if expected == "none" else "enabled")
+    assert route["requested_effort"] == ("none" if configured == {"enabled": False} else configured.get("effort") if configured else None)
+    assert route["observed"] is True
+
+
+def _rewrite_model_and_effort(request):
+    return {**request, "model": "middleware-model", "reasoning_effort": "low"}
+
+
+# case: (dispatch kwargs, request_overrides, model the SDK sends, effort the SDK sends)
+_FINAL_REQUEST_CASES = {
+    "request_middleware_rewrites_model_and_effort": (
+        {"request_middleware": _rewrite_model_and_effort}, None, "middleware-model", "low"),
+    "execution_middleware_rewrites_model_and_effort": (
+        {"execution_middleware": _rewrite_model_and_effort}, None, "middleware-model", "low"),
+    "execution_middleware_removes_reasoning": (
+        {"execution_middleware": _without_reasoning}, None, "moonshotai/kimi-k3", None),
+    "top_level_model_override": ({}, {"model": "override-model"}, "override-model", "high"),
+    "conflicting_extra_body": (
+        {}, {"extra_body": {"model": "wire-model", "reasoning_effort": "low"}}, "wire-model", "low"),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_FINAL_REQUEST_CASES))
+def test_subagent_route_is_the_final_dispatched_request_not_the_built_one(monkeypatch, case):
+    """Route truth is the payload the SDK encodes: after request/execution middleware, with
+    request_overrides applied and extra_body taking precedence over same-named parameters."""
+    from agent.runtime_route import runtime_route
+
+    dispatch, overrides, model, effort = _FINAL_REQUEST_CASES[case]
+    agent = _make_agent(monkeypatch, "custom:relay", base_url="http://127.0.0.1:8080/v1", model="moonshotai/kimi-k3")
+    agent.reasoning_config = {"enabled": True, "effort": "high"}
+    if overrides is not None:
+        agent.request_overrides = overrides
+    sent = _dispatch_one_turn_request(monkeypatch, agent, **dispatch)
+    assert (sent["model"], sent.get("reasoning_effort")) == (model, effort)
+    route = runtime_route(agent)
+    assert route["model"] == sent["model"]
+    assert route["wire_effort"] == route["effective_effort"] == sent.get("reasoning_effort")
+    assert route["reasoning_status"] == ("unknown" if effort is None else "enabled")
+    assert route["requested_effort"] == "high"  # intent is kept separately from what was sent
+    assert route["observed"] is True
+
+
+def test_subagent_route_is_not_observed_by_building_a_request_that_is_never_sent(monkeypatch):
+    from agent.runtime_route import runtime_route
+
+    agent = _make_agent(monkeypatch, "custom:relay", base_url="http://127.0.0.1:8080/v1", model="moonshotai/kimi-k3")
+    agent.reasoning_config = {"enabled": True, "effort": "ultra"}
+    agent._build_api_kwargs([{"role": "user", "content": "hi"}])
+    route = runtime_route(agent)
+    assert (route["requested_effort"], route["wire_effort"], route["effective_effort"]) == ("ultra", None, None)
+    assert route["reasoning_status"] == "unknown"
+    assert route["observed"] is False
+
+
 class TestBuildApiKwargsOpenRouter:
 
     def test_includes_reasoning_in_extra_body(self, monkeypatch):

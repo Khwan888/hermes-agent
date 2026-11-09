@@ -9,6 +9,22 @@ from pydantic import Field
 from .base import JsonValue, Params, Payload, Result, WireEnum
 
 
+class SubagentRoute(Result):
+    """Secret-free effective route read from the running child, never its launch label."""
+
+    provider: str | None
+    model: str | None
+    requested_effort: str | None
+    wire_effort: str | None
+    effective_effort: str | None
+    effort_source: Literal["configured", "default", "unknown"]
+    reasoning_status: Literal["enabled", "disabled", "unknown"]
+    # False until a request on the current route was dispatched: requested_effort is
+    # then intent only, and effective_effort/reasoning_status stay unknown.
+    observed: bool
+    fallback_activated: bool | None
+
+
 class OpenModel(Result):
     """A result/payload row whose known fields are typed but which the producer may extend
     (the closed set is owned elsewhere: hermes_state rows, provider inventories)."""
