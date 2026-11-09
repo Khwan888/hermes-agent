@@ -99,10 +99,17 @@ def _fabricated_entry(idx: int, status: str, error: str, child: Any, duration: f
         "task_index": idx, "status": status, "summary": None, "error": error, "api_calls": 0,
         "duration_seconds": duration, "_child_role": getattr(child, "_delegate_role", None),
     }
+    entry.update(_child_locators(child))
     route = _route_report(child)
     if route is not None:
         entry["route"] = route
     return entry
+
+def _child_locators(child: Any) -> dict[str, str]:
+    """The child's ``subagent_id`` and its own stored session (``child_session_id``), when it has them: how a
+    client reopens this task's subagent from the call's result after the live roster has forgotten it."""
+    ids = {"subagent_id": getattr(child, "_subagent_id", None), "child_session_id": getattr(child, "session_id", None)}
+    return {key: value for key, value in ids.items() if isinstance(value, str) and value}
 
 def _append_missed_steer(entry: dict[str, Any], late_steer: Optional[str]) -> None:
     """Record steer text that won the race with the child's failure/timeout."""
@@ -683,6 +690,7 @@ def _build_result_entry(
     # Model-visible per-delegation spend (unlike _child_cost_usd above).
     entry["cost_usd"] = round(entry["_child_cost_usd"], 6)
     entry["cost_status"] = _cost_status if isinstance(_cost_status, str) and _cost_status else "unknown"
+    entry.update(_child_locators(child))
     _route = _route_report(child)
     if _route is not None:
         entry["route"] = _route

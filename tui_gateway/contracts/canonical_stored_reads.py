@@ -79,3 +79,34 @@ canonical_method('session.transcript', params=StoredTranscriptParams, result=Sto
                      "unknown child is `available: false`. Refusals: invalid_params (a cursor issued for "
                      "another session, child or order, or not by this read), not_found, permission_denied, "
                      "profile_mismatch.")
+
+
+class SubagentLocateParams(CanonicalSessionParams):
+    # A ``delegate_task`` call of ``session_id`` (its stored ``tool_call_id``): the transcript card's call.
+    tool_call_id: str
+
+
+class SubagentLocateChild(Result):
+    task_index: int
+    # The task's own stored session (newest segment), or null when no stored subagent is proven to be it.
+    child_session_id: str | None = None
+    # Still in this session's live roster.
+    running: bool = False
+
+
+class SubagentLocateResult(Result):
+    session_id: str
+    tool_call_id: str
+    # One per task of the call, in task order; empty when the conversation holds no such call.
+    children: list[SubagentLocateChild]
+
+
+canonical_method('subagent.locate', params=SubagentLocateParams, result=SubagentLocateResult,
+                 doc="The stored subagent session behind each task of one `delegate_task` call of the session, so a "
+                     "transcript card opens its subagents after the live roster forgot them (finished, reloaded, "
+                     "restarted). A subagent counts only when it is a delegate child of this conversation's "
+                     "lineage: ids the call's result names (`child_session_ids`, `subagent_ids`, a settled "
+                     "entry's `child_session_id`) win; a result that names none (calls stored before those "
+                     "keys existed) links the delegate child that started after the call with that task's goal, "
+                     "calls claiming in the order they were made. Unproven tasks are null. Refusals: "
+                     "invalid_params, not_found, permission_denied.")

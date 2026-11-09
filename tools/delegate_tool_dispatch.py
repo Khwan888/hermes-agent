@@ -401,6 +401,15 @@ def _dispatched_payload(batch: _Batch, units: list[tuple[_Batch, str]]) -> dict:
     if any(isinstance(s, str) and s for s in sids):
         payload["subagent_ids"] = sids
         payload["control_hint"] = _BACKGROUND_NOTES["control_hint"]
+    # Each child's own stored session by task index (None for a refused task): what a client opens from
+    # this call's card once the live roster has forgotten the child (finished, reloaded, restarted).
+    child_sids: list = [None] * len(batch.task_list)
+    for (i, _, c) in batch.children:
+        sid = getattr(c, "session_id", None)
+        if 0 <= i < len(child_sids) and isinstance(sid, str) and sid:
+            child_sids[i] = sid
+    if any(child_sids):
+        payload["child_session_ids"] = child_sids
     if batch.refused:
         payload["refused"] = batch.refused
     if batch.live_paths:
