@@ -460,6 +460,10 @@ def _drain_queued_prompt(rid, sid: str, session: dict) -> bool:
     with _session_turn_admission(session) as admitted:
         if not admitted or session.get("_closing") or not (queued := session.get("queued_prompt")) or session.get("running"):
             return False
+        # A watch page has no runner. A stale browser queue must not claim a
+        # native turn here: the missing-agent failure would end its live mirror.
+        if _watching_live_child(session):
+            return False
         queue_generation = int(session.get("_queued_prompt_generation", 0))
         _ac_set_queue(session, session.get("queued_prompts") or [])
         session["running"] = True

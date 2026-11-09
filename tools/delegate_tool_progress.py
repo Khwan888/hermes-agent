@@ -6,6 +6,7 @@ import logging
 import enum
 import os
 import threading
+import time
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 from tools.delegate_tool_registry import _active_subagents, _active_subagents_lock
@@ -305,6 +306,7 @@ class _ChildProgressRelay:
         self.batch: list[str] = []
         self.parent_scope: Any = None  # owning parent agent; set by _build_child_progress_callback
         self.tool_count = 0  # per-subagent running counter
+        self._stream_checkpoint_at: float | None = None
 
     def _prefix(self) -> str:
         # The batch tag is resolved lazily from session_ref: the relay is built
@@ -327,8 +329,10 @@ class _ChildProgressRelay:
                 kw[dst] = str(self.session_ref[src])
         if (child := self.session_ref.get("_child")) is not None:
             from agent.runtime_route import runtime_route
+            from tools.delegate_tool_usage import subagent_usage
             kw["route"] = runtime_route(child)
             kw["model"] = kw["route"]["model"]
+            kw["usage"] = subagent_usage(child)
         kw["tool_count"] = self.tool_count
         return kw
 
@@ -360,6 +364,13 @@ class _ChildProgressRelay:
         self._relay("subagent.start", preview=preview or self.goal_label or "", **kwargs)
 
     def _on_complete(self, tool_name, preview, args, kwargs):
+        from tools.delegate_tool_usage import remember_subagent
+        with _active_subagents_lock:
+            record = dict(_active_subagents.get(self.subagent_id, {}))
+        if record:
+            with _quiet("Could not retain subagent meters: %s"):
+                remember_subagent(record.get("agent"), record, kwargs.get("status", "completed"),
+                                kwargs.get("duration_seconds"))
         # Failed child: echo one clean reason line into the CLI tree so the human
         # sees WHY, not just a vanished branch (gateway renders off the relayed event).
         # The echo is an automatic diagnostic presentation: it goes through the warning
@@ -378,7 +389,32 @@ class _ChildProgressRelay:
             )
         self._relay("subagent.complete", preview=preview, **kwargs)
 
+    def _checkpoint_stream(self, record, *, force=False):
+        """Retain the first received work immediately, then at most once a second.
+
+        Tool boundaries clear the unfinished tail immediately: the completed
+        assistant message is already in the transcript and must not be duplicated.
+        Never keep the registry lock while doing a best-effort store write.
+        """
+        if not record:
+            return
+        now = time.monotonic()
+        if not force and self._stream_checkpoint_at is not None and now - self._stream_checkpoint_at < 1:
+            return
+        from tools.delegate_tool_usage import remember_subagent
+        with _quiet("Could not retain subagent stream checkpoint: %s"):
+            remember_subagent(record.get("agent"), record, "running", None)
+        self._stream_checkpoint_at = now
+
     def _on_text(self, tool_name, preview, args, kwargs):
+        snapshot = None
+        if self.subagent_id:
+            with _active_subagents_lock:
+                record = _active_subagents.get(self.subagent_id)
+                if record is not None:
+                    record["live_text"] = (record.get("live_text", "") + (preview or ""))[-65536:]
+                    snapshot = dict(record)
+        self._checkpoint_stream(snapshot)
         # Streamed child reply text, relayed verbatim for gateway watch windows;
         # inert on CLI/TUI (their progress handlers ignore non-tool events).
         self._relay("subagent.text", preview=preview)
@@ -401,12 +437,16 @@ class _ChildProgressRelay:
 
     def _on_tool_started(self, tool_name, preview, args, kwargs):
         self.tool_count += 1
+        snapshot = None
         if self.subagent_id is not None:
             with _active_subagents_lock:
                 rec = _active_subagents.get(self.subagent_id)
                 if rec is not None:
+                    rec["live_text"] = ""
                     rec["tool_count"] = self.tool_count
                     rec["last_tool"] = tool_name or ""
+                    snapshot = dict(rec)
+        self._checkpoint_stream(snapshot, force=True)
         if self.spinner:
             from agent.display import get_tool_emoji
             line = f"{get_tool_emoji(tool_name or '')} {tool_name}"

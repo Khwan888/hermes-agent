@@ -46,6 +46,64 @@ def _visible_subagent_records(session_id, transport, owner):
             or _owns_subagent_record(r, agent)]
 
 
+def _viewer_subagent_record(viewer, subagent_id=None):
+    """An attached page names ONLY its own running child, never a sibling or another profile.
+
+    The parent is checked by object identity: a reminted/replaced generation does
+    not inherit a retired parent's controls. This read never attaches its transport.
+    """
+    from tools.delegate_tool_registry import _active_subagents, _active_subagents_lock, _subagent_transport_matches
+
+    child_key = _session_lookup_key(viewer)
+    if not child_key or viewer.get("_finalized") or viewer.get("_closing"):
+        return None
+    with _sessions_lock, _active_subagents_lock:
+        for record in _active_subagents.values():
+            child = record.get("agent")
+            if (child_key not in (getattr(child, "session_id", None), record.get("child_origin_session_id"))
+                    or (subagent_id is not None and record.get("subagent_id") != subagent_id)):
+                continue
+            parent = record.get("owner_session_record")
+            parent_id = record.get("owner_session_id")
+            if (not isinstance(parent, dict) or _sessions.get(parent_id) is not parent
+                    or parent.get("_finalized") or parent.get("_closing")
+                    or not _live_profile_matches(parent, viewer.get("profile_home"))
+                    or parent.get("transport") is None
+                    or not _subagent_transport_matches(record, parent["transport"])):
+                continue
+            return dict(record)
+    return None
+
+
+def _watching_live_child(session):
+    """A lazy viewer is not an idle runner, even when its child's relay is quiet."""
+    return session.get("agent") is None and (
+        _child_run_active(str(session.get("session_key") or ""), session.get("profile_home"))
+        or _viewer_subagent_record(session) is not None)
+
+
+def _subagent_control_authority(session_id, subagent_id):
+    transport, owner = _current_session_steer_authority(session_id)
+    if owner is not None and (record := _viewer_subagent_record(owner, subagent_id)) is not None:
+        parent = record["owner_session_record"]
+        return record["owner_session_id"], parent["transport"], parent
+    return session_id, transport, owner
+
+
+@method("subagent.subject")
+def _(rid, params):
+    """Resolve the original child for an attached subagent page, without resuming its parent."""
+    _transport, viewer = _current_session_steer_authority(_str_param(params, "session_id"))
+    if viewer is None:
+        return _err(rid, 4001, "session not found or not owned by this transport")
+    record = _viewer_subagent_record(viewer)
+    from gateway.session_ancillary import subagent_row
+
+    return _ok(rid, {"available": record is not None,
+                     "parent_session_id": record["owner_session_id"] if record else None,
+                     "subagent": subagent_row(record) if record else None})
+
+
 @method("subagent.list")
 def _(rid, params):
     session_id = _str_param(params, "session_id")
@@ -159,10 +217,10 @@ def _(rid, params):
     if not subagent_id:
         return _err(rid, 4000, "subagent_id required")
     session_id = _str_param(params, "session_id")
-    transport, owner = _current_session_steer_authority(session_id)
+    owner_id, transport, owner = _subagent_control_authority(session_id, subagent_id)
     if transport is None or owner is None:
         return _err(rid, 4001, "session not found or not owned by this transport")
-    record = next((r for r in _owned_subagent_records(session_id, transport, owner)
+    record = next((r for r in _owned_subagent_records(owner_id, transport, owner)
                    if r.get("subagent_id") == subagent_id), None)
     agent = record.get("agent") if record else None
     # Interrupt the authorized object, never re-resolve a globally recyclable id.

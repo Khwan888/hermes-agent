@@ -2439,10 +2439,11 @@ export interface SessionForeignImportResult {
   session_id: string
   already_imported?: boolean
 }
-/** ``delegations``: recently failed async delegation tasks for the session (durable store), newest first. */
-export interface SubagentListResult {
-  subagents?: SubagentSnapshot[]
-  delegations?: FailedDelegation[]
+/** Original live child for this attached page; parent id is informational, not a transport grant. */
+export interface SubagentSubjectResult {
+  available: boolean
+  parent_session_id: string | null
+  subagent: SubagentSnapshot | null
 }
 /** ``gateway.session_ancillary.subagent_row`` projection of one live child record. */
 export interface SubagentSnapshot {
@@ -2453,12 +2454,15 @@ export interface SubagentSnapshot {
   delegation_id?: string | null
   model?: string | null
   route?: SubagentRoute | null
+  usage?: SubagentUsage | null
   started_at?: number | null
   status?: SubagentStatus | null
   tool_count?: number | null
   last_tool?: string | null
   accepting_steer?: boolean | null
   child_session_id?: string | null
+  live_text?: string | null
+  duration_seconds?: number | null
 }
 /** Secret-free effective route read from the running child, never its launch label. */
 export interface SubagentRoute {
@@ -2472,8 +2476,24 @@ export interface SubagentRoute {
   observed: boolean
   fallback_activated: boolean | null
 }
+/** Actual child counters; unavailable measurements are null, never viewer zeros. Input excludes cache; prompt includes it. Throughput is a rolling API-latency average, not cumulative tokens divided by run time. Generation-only time is currently unavailable (null). */
+export interface SubagentUsage {
+  context_tokens: number | null
+  context_window: number | null
+  input_tokens: number | null
+  cached_tokens: number | null
+  output_tokens: number | null
+  generation_seconds: number | null
+  prompt_tokens: number | null
+  tokens_per_second: number | null
+}
 /** Lifecycle of one delegated child (``tools/delegate_tool_child_run.py``); ``failed`` / ``error`` / ``timeout`` / ``interrupted`` / ``completed`` are terminal. */
 export type SubagentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'error' | 'timeout' | 'interrupted'
+/** ``delegations``: recently failed async delegation tasks for the session (durable store), newest first. */
+export interface SubagentListResult {
+  subagents?: SubagentSnapshot[]
+  delegations?: FailedDelegation[]
+}
 /** ``async_delegation.failed_delegations_for_session`` row: one failed task of an async delegation. */
 export interface FailedDelegation {
   delegation_id: string
@@ -6171,6 +6191,7 @@ export interface SubagentEventPayload {
   depth?: number | null
   model?: string | null
   route?: SubagentRoute | null
+  usage?: SubagentUsage | null
   tool_count?: number | null
   toolsets?: string[] | null
   input_tokens?: number | null
@@ -6762,6 +6783,8 @@ export interface RpcMethods {
   'subagent.roster': { params: ProfileParams; result: SubagentRosterResult }
   /** Queue steering text into a live delegated child owned by this session. */
   'subagent.steer': { params: SubagentSteerParams; result: SubagentSteerResult }
+  /** Resolve an attached subagent page's original live child without attaching its parent. */
+  'subagent.subject': { params: SessionParams; result: SubagentSubjectResult }
   /** Last 16KB of an owned child's live transcript. */
   'subagent.tail': { params: SubagentIdParams; result: SubagentTailResult }
   /** Schedule a downgrade / same-price change or a period-end cancellation. */
@@ -7058,6 +7081,7 @@ export const RPC_METHODS = [
   'subagent.list',
   'subagent.roster',
   'subagent.steer',
+  'subagent.subject',
   'subagent.tail',
   'subscription.change',
   'subscription.preview',

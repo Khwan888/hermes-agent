@@ -4165,6 +4165,24 @@
       }
     },
     {
+      "name": "subagent.subject",
+      "summary": "Resolve an attached subagent page's original live child without attaching its parent.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SessionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SubagentSubjectResult"
+        }
+      }
+    },
+    {
       "name": "subagent.tail",
       "summary": "Last 16KB of an owned child's live transcript.",
       "params": [
@@ -43980,6 +43998,17 @@
             ],
             "default": null
           },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "tool_count": {
             "anyOf": [
               {
@@ -44590,6 +44619,17 @@
             ],
             "default": null
           },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "started_at": {
             "anyOf": [
               {
@@ -44660,6 +44700,30 @@
             ],
             "default": null,
             "title": "Child Session Id"
+          },
+          "live_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Live Text"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Seconds"
           }
         },
         "required": [
@@ -44742,6 +44806,44 @@
         "title": "SubagentSteerResult",
         "type": "object"
       },
+      "SubagentSubjectResult": {
+        "additionalProperties": false,
+        "description": "Original live child for this attached page; parent id is informational, not a transport grant.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "parent_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Session Id"
+          },
+          "subagent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "available",
+          "parent_session_id",
+          "subagent"
+        ],
+        "title": "SubagentSubjectResult",
+        "type": "object"
+      },
       "SubagentTailResult": {
         "additionalProperties": false,
         "description": "``available`` is false while the child has no live transcript yet (or it was cleaned up).",
@@ -44770,6 +44872,112 @@
           "subagent_id"
         ],
         "title": "SubagentTailResult",
+        "type": "object"
+      },
+      "SubagentUsage": {
+        "additionalProperties": false,
+        "description": "Actual child counters; unavailable measurements are null, never viewer zeros.\n\nInput excludes cache; prompt includes it. Throughput is a rolling API-latency\naverage, not cumulative tokens divided by run time. Generation-only time is\ncurrently unavailable (null).",
+        "properties": {
+          "context_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Tokens"
+          },
+          "context_window": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "cached_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "generation_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Seconds"
+          },
+          "prompt_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Tokens"
+          },
+          "tokens_per_second": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens Per Second"
+          }
+        },
+        "required": [
+          "context_tokens",
+          "context_window",
+          "input_tokens",
+          "cached_tokens",
+          "output_tokens",
+          "generation_seconds",
+          "prompt_tokens",
+          "tokens_per_second"
+        ],
+        "title": "SubagentUsage",
         "type": "object"
       },
       "SubscriptionChangeEffect": {

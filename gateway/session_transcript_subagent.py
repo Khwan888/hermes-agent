@@ -63,6 +63,7 @@ def _read(authority, live, ref, binding, held, limit, inline_images):
     return {'session_id': ref.session_id, **page, 'subagent_id': subagent_id, 'available': True,
             'running': running, 'child_session_id': child}
 
+
 async def subagent_locate(connection, ref, params):
     """``subagent.locate``: the stored subagent session of each task of one ``delegate_task`` call
     (``tools.delegate_tool_sessions.delegate_call_children``), under the parent's read authority."""
@@ -85,15 +86,15 @@ def _locate(authority, live, ref, tool_call_id):
 
     def roster():
         from gateway.session_history_mount import is_history_mount
+        from gateway.session_subagent_subject import require_subagent_read_owner, subject_record
         target = physical_target(authority, ref)
-        if is_history_mount(live):
+        if is_history_mount(live) and subject_record(authority, target) is None:
             # A history mount owns no writer route. Read only records tied to
             # this stored lineage and profile DB, never objects from a reused route.
             from gateway.session_ancillary import subagent_records
             records = subagent_records(None, target, session_db=authority.db)
         else:
-            from gateway.session_ancillary import _require_current_route
-            _require_current_route(authority, ref)
+            require_subagent_read_owner(authority, ref)
             records = _owner_objects(authority, ref, include_fallback_evicted=True)[1]
         running = {getattr(r.get('agent'), 'session_id', None) for r in records}
         return running, target

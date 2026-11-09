@@ -444,6 +444,8 @@ def _register_child(
         "delegation_id": _str_or_none(getattr(child, "_delegation_id", None)),
         "model": _str_or_none(getattr(child, "model", None)),
         "started_at": time.time(), "status": "running", "tool_count": 0, "agent": child,
+        # Keep an already-open page tied to this run when compression rotates its session.
+        "child_origin_session_id": _str_or_none(getattr(child, "session_id", None)),
         # Owning conversation's durable session id (same lineage completion delivery routes by), sourced from the
         # child's stamp so it survives a parent_agent rebuild between dispatch and run; used for list/steer/stop
         # ownership when the weakref chain breaks.

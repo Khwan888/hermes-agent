@@ -477,6 +477,8 @@ def _subagent_payload(event_type: str, name: str | None, preview, kw: dict, *, s
     source = {**kw, "tool_name": name, "text": preview}
     if isinstance(kw.get("route"), dict):
         payload["route"] = kw["route"]
+    if isinstance(kw.get("usage"), dict):
+        payload["usage"] = kw["usage"]
     for key, present, coerce in _SUBAGENT_FIELDS:
         if present(source.get(key)):
             val = coerce(source[key])

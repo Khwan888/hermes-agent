@@ -25,6 +25,24 @@ class SubagentRoute(Result):
     fallback_activated: bool | None
 
 
+class SubagentUsage(Result):
+    """Actual child counters; unavailable measurements are null, never viewer zeros.
+
+    Input excludes cache; prompt includes it. Throughput is a rolling API-latency
+    average, not cumulative tokens divided by run time. Generation-only time is
+    currently unavailable (null).
+    """
+
+    context_tokens: int | None
+    context_window: int | None
+    input_tokens: int | None
+    cached_tokens: int | None
+    output_tokens: int | None
+    generation_seconds: float | None
+    prompt_tokens: int | None
+    tokens_per_second: float | None
+
+
 class OpenModel(Result):
     """A result/payload row whose known fields are typed but which the producer may extend
     (the closed set is owned elsewhere: hermes_state rows, provider inventories)."""

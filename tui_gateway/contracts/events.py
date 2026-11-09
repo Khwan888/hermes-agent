@@ -18,7 +18,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from .base import JsonValue, Payload, WireEnum
-from .common import MessageReaction, PlanGauge, SessionLiveInfo, SubagentRoute, SubagentStatus, ToolLabel, ToolLabelKind, Usage
+from .common import MessageReaction, PlanGauge, SessionLiveInfo, SubagentRoute, SubagentStatus, SubagentUsage, ToolLabel, ToolLabelKind, Usage
 from .config_free_tier_control import FreeTierChallengePayload, SessionControlSnapshot
 from .registry import event
 
@@ -646,6 +646,7 @@ class SubagentEventPayload(Payload):
     depth: int | None = None
     model: str | None = None
     route: SubagentRoute | None = None
+    usage: SubagentUsage | None = None
     tool_count: int | None = None
     toolsets: list[str] | None = None
     input_tokens: int | None = None

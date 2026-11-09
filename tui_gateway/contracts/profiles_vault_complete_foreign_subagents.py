@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
-from .common import OpenModel, ProfileParams, SessionParams, SubagentRoute, SubagentStatus
+from .common import OpenModel, ProfileParams, SessionParams, SubagentRoute, SubagentStatus, SubagentUsage
 from .config_free_tier_control import ModelOptionProvider
 from .registry import method
 
@@ -667,6 +667,7 @@ class SubagentSnapshot(Result):
     delegation_id: str | None = None
     model: str | None = None
     route: SubagentRoute | None = None
+    usage: SubagentUsage | None = None
     started_at: float | None = None
     status: SubagentStatus | None = None
     tool_count: int | None = None
@@ -674,6 +675,21 @@ class SubagentSnapshot(Result):
     accepting_steer: bool | None = None
     #: The child's own stored session (``session.transcript`` reads it by ``subagent_id``); None until it has one.
     child_session_id: str | None = None
+    #: Current streamed reply segment, capped at 64 KiB; cleared when a tool begins.
+    live_text: str | None = None
+    duration_seconds: float | None = None
+
+
+class SubagentSubjectResult(Result):
+    """Original live child for this attached page; parent id is informational, not a transport grant."""
+
+    available: bool
+    parent_session_id: str | None
+    subagent: SubagentSnapshot | None
+
+
+method("subagent.subject", params=SessionParams, result=SubagentSubjectResult,
+       doc="Resolve an attached subagent page's original live child without attaching its parent.")
 
 
 class FailedDelegation(Result):

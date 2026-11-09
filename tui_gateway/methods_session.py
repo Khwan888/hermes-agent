@@ -2218,8 +2218,7 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 4002, "text is required")
     if (err := _sess_nowait(params, rid)[1]) is not None:
         return err
-    owner_id = _str_param(params, "session_id")
-    transport, owner = _current_session_steer_authority(owner_id)
+    owner_id, transport, owner = _subagent_control_authority(_str_param(params, "session_id"), subagent_id)
     queued = transport is not None and owner is not None and steer_subagent(
         subagent_id, text, owner_session_id=owner_id, owner_transport=transport, owner_session_record=owner)
     return _ok(rid, {"status": "queued" if queued else "rejected", "subagent_id": subagent_id, "text": text})

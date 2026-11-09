@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 from gateway.session_busy_controls import authorize
+from gateway.session_subagent_subject import controlled_child, subject
 from hermes_state_runtime import RuntimeStoreError
 
 
@@ -25,7 +26,7 @@ def handlers(connection):
     return {**{name: partial(read, connection, kind=kind) for name, kind in {
         'session.control.read': 'control', 'process.list': 'processes',
         'subagent.list': 'subagents', 'subagent.tail': 'tail',
-    }.items()}, 'approval.pending': partial(approvals, connection),
+    }.items()}, 'subagent.subject': partial(subject, connection), 'approval.pending': partial(approvals, connection),
         'approval.received': partial(approvals, connection, ack=True),
         'process.stop': partial(stop_processes, connection),
         'process.kill': partial(kill_process, connection), 'reload.mcp': partial(reload_mcp, connection),
@@ -44,11 +45,13 @@ async def subagent_control(connection, ref, params, *, steer):
         raise RuntimeStoreError('invalid_params')
     if ref.session_id not in connection.authority.sessions:
         raise RuntimeStoreError('not_found')
-    authorize(connection, ref, params, 'session:control')
+    child = controlled_child(connection, ref, params)
     live, sub = connection.authority.sessions[ref.session_id], params['subagent_id']
-    with live.event_stream.lock:
-        _require_current_route(connection.authority, ref)
-        child = next((r['agent'] for r in _owner_objects(connection.authority, ref)[1] if r.get('subagent_id') == sub), None)
+    if child is None:
+        authorize(connection, ref, params, 'session:control')
+        with live.event_stream.lock:
+            _require_current_route(connection.authority, ref)
+            child = next((r['agent'] for r in _owner_objects(connection.authority, ref)[1] if r.get('subagent_id') == sub), None)
     if not steer:
         from agent.interrupt_compat import request_hard_interrupt
         return {'found': child is not None and bool(request_hard_interrupt(child, f'Interrupted via Desktop ({sub})')),
@@ -262,7 +265,11 @@ def _project(authority, ref, params, kind):
         # Persisted per session id, never the route's live objects: readable after a messaging
         # route moved on to another conversation.
         return {'control': control_snapshot(authority, ref)}
-    _require_current_route(authority, ref)
+    if kind == 'subagents':
+        from gateway.session_subagent_subject import require_subagent_read_owner
+        require_subagent_read_owner(authority, ref)
+    else:
+        _require_current_route(authority, ref)
     agent, records = _owner_objects(authority, ref, include_fallback_evicted=kind == 'subagents')
     if kind == 'subagents':
         return {'subagents': [subagent_row(record) for record in records], 'delegations': []}
@@ -593,12 +600,14 @@ def subagent_row(record):
     """One ``subagent.list`` row; ``child_session_id`` is the child's own stored session, the one
     ``session.transcript`` reads for its ``subagent_id``."""
     from agent.runtime_route import runtime_route
+    from tools.delegate_tool_usage import subagent_usage
 
     child = getattr(record.get('agent'), 'session_id', None)
     route = runtime_route(record.get('agent'))
     return {**{key: record.get(key) for key in _SUBAGENT_FIELDS},
-            'model': route['model'], 'route': route,
-            'child_session_id': child if isinstance(child, str) and child else None}
+            'model': route['model'], 'route': route, 'usage': subagent_usage(record.get('agent')),
+            'child_session_id': child if isinstance(child, str) and child else None,
+            'live_text': record.get('live_text') or None}
 
 
 def subagent_tail(records, subagent_id):
