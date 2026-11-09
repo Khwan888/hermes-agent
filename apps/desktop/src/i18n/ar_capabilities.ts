@@ -65,6 +65,13 @@ export const arCapabilities = {
     failedToUpdate: name => `فشل تحديث ${name}`
   },
   agents: {
+    providerUnknown: 'المزوّد غير معروف',
+    modelUnknown: 'النموذج غير معروف',
+    reasoningOff: 'الاستدلال معطّل',
+    effortUnknown: 'مستوى الاستدلال غير معروف',
+    routeFallback: 'مسار بديل',
+    defaultEffort: effort => `${effort} (افتراضي)`,
+    configuredEffort: effort => `${effort} (مُعدّ، لم يُرصد بعد)`,
     extendedTranscript: 'سجل موسّع',
     transcriptTruncated: 'عرض أحدث 16 KiB',
     transcriptUnavailable: 'السجل المباشر غير متاح',

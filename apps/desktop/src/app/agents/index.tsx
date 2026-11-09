@@ -10,6 +10,7 @@ import { FadeText } from '@/components/ui/fade-text'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertCircle, CheckCircle2 } from '@/lib/icons'
+import { subagentRouteSubtitle } from '@/lib/subagent-route'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { $activeSessionId } from '@/store/session'
@@ -339,7 +340,17 @@ function StreamLine({
   )
 }
 
-export function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; depth?: number; nowMs: number }) {
+export function SubagentRow({
+  node,
+  depth = 0,
+  nowMs,
+  parentSessionId
+}: {
+  node: SubagentNode
+  depth?: number
+  nowMs: number
+  parentSessionId?: string
+}) {
   const { t } = useI18n()
   const running = node.status === 'running' || node.status === 'queued'
   const elapsed = useElapsedSeconds(running, `subagent:${node.id}`, node.startedAt)
@@ -360,7 +371,7 @@ export function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; de
   const fileLines = [...node.filesWritten.map(p => `+ ${p}`), ...node.filesRead.map(p => `· ${p}`)]
 
   const subtitle = [
-    node.model,
+    ...subagentRouteSubtitle(node.route, node.model, t.agents),
     fmtDuration(durationSeconds, t.agents),
     node.toolCount ? t.agents.toolsCount(node.toolCount) : '',
     fmtTokens((node.inputTokens ?? 0) + (node.outputTokens ?? 0), t.agents),
@@ -368,7 +379,15 @@ export function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; de
   ].filter(Boolean)
 
   return (
-    <div className={cn('grid min-w-0 max-w-full gap-2', depth > 0 && 'pl-4')} data-slot="tool-block" ref={enterRef}>
+    <div
+      className={cn('grid min-w-0 max-w-full gap-2', depth > 0 && 'pl-4')}
+      data-parent-session-id={parentSessionId ?? node.parentSessionId}
+      data-session-id={node.sessionId}
+      data-slot="tool-block"
+      data-subagent-id={node.id}
+      data-subagent-status={node.status}
+      ref={enterRef}
+    >
       <button
         aria-expanded={open}
         className="group flex w-full min-w-0 items-start gap-2.5 text-left"
@@ -386,7 +405,7 @@ export function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; de
             {node.goal}
           </span>
           {subtitle.length > 0 ? (
-            <FadeText className="text-[0.66rem] leading-[1.05rem] text-muted-foreground/65">
+            <FadeText className="text-[0.66rem] leading-[1.05rem] text-muted-foreground" title={subtitle.join(' · ')}>
               {subtitle.join(' · ')}
             </FadeText>
           ) : null}
@@ -429,7 +448,7 @@ export function SubagentRow({ node, depth = 0, nowMs }: { node: SubagentNode; de
       {node.children.length > 0 ? (
         <div className="grid min-w-0 gap-3 pl-6">
           {node.children.map(child => (
-            <SubagentRow depth={depth + 1} key={child.id} node={child} nowMs={nowMs} />
+            <SubagentRow depth={depth + 1} key={child.id} node={child} nowMs={nowMs} parentSessionId={node.sessionId} />
           ))}
         </div>
       ) : null}

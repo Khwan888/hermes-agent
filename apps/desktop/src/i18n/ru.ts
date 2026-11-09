@@ -1580,6 +1580,13 @@ export const ruOverrides = {
     resetToMine: 'Вернуться к моей карте'
   },
   agents: {
+    providerUnknown: 'Провайдер неизвестен',
+    modelUnknown: 'Модель неизвестна',
+    reasoningOff: 'Рассуждение выключено',
+    effortUnknown: 'Уровень неизвестен',
+    routeFallback: 'Резервный маршрут',
+    defaultEffort: effort => `${effort} (по умолчанию)`,
+    configuredEffort: effort => `${effort} (настроено, ещё не подтверждено)`,
     extendedTranscript: 'Подробный журнал',
     transcriptTruncated: 'Последние 16 КиБ',
     transcriptUnavailable: 'Текущий журнал недоступен',
