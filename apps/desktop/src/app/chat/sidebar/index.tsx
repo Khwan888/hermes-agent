@@ -61,7 +61,6 @@ import {
   $sidebarWorkspaceParentOrderIds,
   filterVisibleProjects,
   pinSession,
-  SESSION_SEARCH_FOCUS_EVENT,
   setPinnedSessionOrder,
   setSidebarCronOpen,
   setSidebarPinsOpen,
@@ -195,6 +194,7 @@ import { SidebarSessionsSection, VIRTUALIZE_THRESHOLD } from './sessions-section
 import { CONTEXT_SPLIT_KIT, SplitSubmenu } from './split-submenu'
 import { useEnteredProjectSessions } from './use-entered-project-sessions'
 import { useServerSessionSearch } from './use-server-session-search'
+import { useSidebarSearchFocus } from './use-sidebar-search-focus'
 
 // Non-session groups (messaging platforms) stay compact: show a few rows up
 // front, reveal more in larger steps on demand. Keeps a busy platform from
@@ -555,17 +555,8 @@ export function ChatSidebar({
   const messagingOpenIds = useStore($sidebarMessagingOpenIds)
   // Per-platform count of rows currently revealed (starts at NON_SESSION_INITIAL_ROWS).
   const [messagingVisible, setMessagingVisible] = useState<Record<string, number>>({})
-  const searchInputRef = useRef<HTMLInputElement>(null)
+  const searchInputRef = useSidebarSearchFocus()
   const trimmedQuery = searchQuery.trim()
-
-  // Hotkey (session.focusSearch) → focus the field once it's mounted.
-  useEffect(() => {
-    const onFocus = () => searchInputRef.current?.focus({ preventScroll: true })
-
-    window.addEventListener(SESSION_SEARCH_FOCUS_EVENT, onFocus)
-
-    return () => window.removeEventListener(SESSION_SEARCH_FOCUS_EVENT, onFocus)
-  }, [])
 
   // Flash the ⌘N hint full-opacity (no transition) for the press, so hitting
   // the shortcut visibly pings its affordance in the sidebar.
@@ -1737,6 +1728,7 @@ export function ChatSidebar({
                     </div>
                   )
                 }
+                includeSubagents
                 label={s.results}
                 onArchiveSession={onArchiveSession}
                 onBranchSession={onBranchSession}

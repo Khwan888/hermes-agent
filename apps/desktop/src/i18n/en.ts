@@ -3184,6 +3184,14 @@ export const en: Translations = {
   },
 
   sidebar: {
+    subagents: {
+      count: (n: number) => (n === 1 ? '1 subagent' : `${n} subagents`),
+      loading: 'Loading subagents…',
+      loadMore: 'Show more subagents',
+      loadFailed: 'Could not load subagents.',
+      retry: 'Retry',
+      empty: 'No subagents'
+    },
     filter: {
       grouping: 'Grouping',
       ordering: 'Ordering',

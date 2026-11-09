@@ -2798,6 +2798,14 @@ export interface Translations extends NoticeTranslations {
   }
 
   sidebar: {
+    subagents: {
+      count: (n: number) => string
+      loading: string
+      loadMore: string
+      loadFailed: string
+      retry: string
+      empty: string
+    }
     filter: {
       grouping: string
       ordering: string

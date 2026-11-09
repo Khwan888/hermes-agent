@@ -86,6 +86,7 @@ import {
 import { secondaryProfileOwnerForEvent } from './session-event-provenance'
 import { $focusedStoredSessionId, TILE_PANE_PREFIX } from './session-focus'
 import { turnHasReply, withNoReplyNotice } from './session-no-reply'
+import { sameSessionOwner } from './session-owner-equality'
 import { assertSessionOwnerResolved } from './session-owner-resolution'
 import {
   isSessionOwnerRoute,
@@ -94,6 +95,7 @@ import {
   type SessionOwnerScope,
   type SessionProfileRoute
 } from './session-request-router'
+import { dropSubagentFoldsForProfile, migrateSubagentFoldsForProfile } from './session-subagent-folds'
 import { orderTilesByTree } from './session-tile-order'
 import { ackStoredSessionId, isMessagingCompletion, markSessionUnreadFinished } from './session-unread'
 import { migrateTranscriptTailsForProfile } from './transcript-tail-cache'
@@ -1474,23 +1476,6 @@ export function patchSessionTile(storedSessionId: string, patch: Partial<Session
   saveTiles($sessionTiles.get().map(t => (t.storedSessionId === storedSessionId ? { ...t, ...patch } : t)))
 }
 
-function sameSessionOwner(left: SessionOwnerScope, right: SessionOwnerScope): boolean {
-  if (isSessionOwnerRoute(left) && isSessionOwnerRoute(right)) {
-    return (
-      left.connectionId.trim() === right.connectionId.trim() &&
-      normalizeProfileKey(left.profile) === normalizeProfileKey(right.profile) &&
-      normalizeProfileKey(left.targetProfile ?? left.profile) ===
-        normalizeProfileKey(right.targetProfile ?? right.profile)
-    )
-  }
-
-  if (typeof left === 'string' && typeof right === 'string') {
-    return normalizeProfileKey(left) === normalizeProfileKey(right)
-  }
-
-  return false
-}
-
 function tileWorkspaceMode(tile: SessionTile): WorkspaceMode {
   return tile.workspaceMode ?? 'sessions'
 }
@@ -2712,6 +2697,7 @@ export function dropTilesForProfile(
   const name = normalizeProfileKey(profile)
   dropPreviewArtifactsForProfile(name, route)
   dropStatusDrawersForProfile(name, route)
+  dropSubagentFoldsForProfile(name, route ?? { connectionId: tileConnectionId || LOCAL_CONNECTION_ID, profile: name })
   // Route fields go through the SAME canonicalization as `name` below — a
   // source-scoped delete must not be defeated by stray whitespace around a
   // profile name that a non-route delete trims away.
@@ -2859,6 +2845,7 @@ export function migrateTilesForProfile(oldProfile: string, newProfile: string): 
   migrateSessionOwnerHintsForProfile(from, to)
   migratePreviewArtifactsForProfile(from, to)
   migrateStatusDrawersForProfile(from, to)
+  migrateSubagentFoldsForProfile(from, to)
   // Sibling family: the rail's profile-keyed buckets move with the rename, or
   // the renamed profile opens with an empty rail and the old name keeps them.
   migratePreviewTabsForProfile(from, to)

@@ -2174,6 +2174,14 @@ export const jaOverrides = {
   },
 
   sidebar: {
+    subagents: {
+      count: (n: number) => `${n} 件のサブエージェント`,
+      loading: 'サブエージェントを読み込み中…',
+      loadMore: 'さらに表示',
+      loadFailed: 'サブエージェントを読み込めませんでした。',
+      retry: '再試行',
+      empty: 'サブエージェントはありません'
+    },
     profileRail: 'プロファイルバー',
     markAllRead: 'すべて既読にする',
     filter: {

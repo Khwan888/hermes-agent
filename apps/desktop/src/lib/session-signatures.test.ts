@@ -54,6 +54,15 @@ describe('sameCronSignature', () => {
     const b = [session('a', 't', { archived: true })]
     expect(sameCronSignature(a, b)).toBe(false)
   })
+
+  // An idle parent gaining a subagent changes nothing else on its row; gating that page
+  // out left an open sidebar fold on its old child list.
+  it('is false when only the subagent count changed', () => {
+    const a = [session('a', 't', { subagent_count: 2 })]
+    const b = [session('a', 't', { subagent_count: 3 })]
+    expect(sameCronSignature(a, b)).toBe(false)
+    expect(sameCronSignature(b, [session('a', 't', { subagent_count: 3 })])).toBe(true)
+  })
 })
 
 describe('sessionMessagesSignature', () => {

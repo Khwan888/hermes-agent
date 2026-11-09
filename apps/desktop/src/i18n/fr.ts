@@ -3635,6 +3635,14 @@ export const frOverrides = {
     missingBody: 'Cet artefact ne figure plus dans le registre local.'
   },
   sidebar: {
+    subagents: {
+      count: (n: number) => (n === 1 ? '1 sous-agent' : `${n} sous-agents`),
+      loading: 'Chargement des sous-agents…',
+      loadMore: 'Afficher plus de sous-agents',
+      loadFailed: 'Impossible de charger les sous-agents.',
+      retry: 'Réessayer',
+      empty: 'Aucun sous-agent'
+    },
     filter: {
       grouping: 'Regroupement',
       ordering: 'Tri',

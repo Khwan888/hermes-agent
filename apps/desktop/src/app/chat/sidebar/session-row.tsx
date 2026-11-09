@@ -57,8 +57,9 @@ import { resolveSessionRowClick } from './session-row-gesture'
 import { SessionRowSlot } from './session-row-slots'
 import { useProfilePrewarm } from './use-profile-prewarm'
 
-interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
+export interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   session: SessionInfo
+  subagentControl?: React.ReactNode
   /** TUI-style tree stem for branched sessions (`└─ ` / `├─ `). */
   branchStem?: string
   isPinned: boolean
@@ -125,8 +126,23 @@ function formatAge(seconds: number, r: Translations['sidebar']['row']): string {
   return unit === 'second' ? r.ageNow : `${value}${r[AGE_KEY[unit]]}`
 }
 
+function sessionRowFigures(session: SessionInfo, rowMeta: readonly string[]): string[] {
+  const totalTokens = session.input_tokens + session.output_tokens
+  const cost = sessionCostUsd(session)
+
+  // Tokens, cost and age share one figure rather than each claiming a column:
+  // several switched on read as one number, not as a widening gutter.
+  return [
+    rowMeta.includes('tokens') && totalTokens > 0 ? compactNumber(totalTokens) : null,
+    // Sub-cent spend rounds to "$0.00", which reads as a bug rather than as a
+    // cheap session — below a cent the row says nothing at all.
+    rowMeta.includes('cost') && cost >= 0.01 ? `$${cost.toFixed(2)}` : null
+  ].filter(Boolean) as string[]
+}
+
 function SidebarSessionRowImpl({
   session,
+  subagentControl,
   branchStem,
   isPinned,
   isSelected,
@@ -184,17 +200,7 @@ function SidebarSessionRowImpl({
   // it reaches all four row render paths at once, the set only changes when a
   // tile opens or closes, and the boolean bails every unaffected row out.
   const openUnfocused = useStoreSelector($openStoredSessionIds, open => !isSelected && open.has(session.id))
-  const totalTokens = session.input_tokens + session.output_tokens
-  const cost = sessionCostUsd(session)
-
-  // Tokens, cost and age share one figure rather than each claiming a column:
-  // several switched on read as one number, not as a widening gutter.
-  const figures = [
-    rowMeta.includes('tokens') && totalTokens > 0 ? compactNumber(totalTokens) : null,
-    // Sub-cent spend rounds to "$0.00", which reads as a bug rather than as a
-    // cheap session — below a cent the row says nothing at all.
-    rowMeta.includes('cost') && cost >= 0.01 ? `$${cost.toFixed(2)}` : null
-  ].filter(Boolean) as string[]
+  const figures = sessionRowFigures(session, rowMeta)
 
   // Everything the Show menu puts after the title shares ONE right-aligned
   // slot, in reading order: identity chips, then the figures. The kebab covers
@@ -315,6 +321,7 @@ function SidebarSessionRowImpl({
       onClick={event => event.stopPropagation()}
       onPointerDown={event => event.stopPropagation()}
     >
+      {subagentControl}
       {trailing.map(({ key, node }, index) => (
         <span
           className={
@@ -342,7 +349,7 @@ function SidebarSessionRowImpl({
           aria-label={r.sessionActions}
           className={cn(
             'size-5 rounded-[4px] bg-transparent text-transparent transition-colors duration-100 hover:bg-(--ui-control-active-background) hover:text-foreground focus-visible:bg-(--ui-control-active-background) focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[state=open]:bg-(--ui-control-active-background) data-[state=open]:text-foreground group-hover:text-(--ui-text-tertiary) [&_svg]:size-3.5!',
-            trailing.length > 0 && 'absolute right-0',
+            trailing.length > 0 && 'absolute end-0',
             pr && KEBAB_YIELDS
           )}
           data-session-actions
@@ -391,6 +398,8 @@ function SidebarSessionRowImpl({
           className
         )}
         data-glass-opaque={dragging ? '' : undefined}
+        data-parent-session-id={session.parent_session_id || undefined}
+        data-session-id={session.id}
         data-working={liveTurn ? 'true' : undefined}
         // The row runs BOTH drags off one press, and each declines outside its
         // own region — so no timing/arbitration rule is needed and neither can
@@ -451,12 +460,12 @@ function SidebarSessionRowImpl({
             // rule, a div doesn't.
             'z-0 w-full cursor-pointer',
             card && 'pr-0',
-            branchStem && 'pl-3.5',
             // The card is a grid with ONE spacing knob: --card-gap. Every row
             // gap is gap-y-(--card-gap); the title/preview group opts out
             // with its own tighter internal flex gap.
             card && 'flex-col items-stretch justify-center py-1.5 [--card-gap:0.4rem] gap-(--card-gap)'
           )}
+          style={branchStem ? { paddingInlineStart: `${Math.ceil(branchStem.length / 3) * 0.875}rem` } : undefined}
           // Middle-click = open in a new tab (browser muscle memory).
           {...middleClickHandlers(() => {
             triggerHaptic('selection')
@@ -673,6 +682,7 @@ function SidebarSessionRowImpl({
 function rowPropsEqual(a: SidebarSessionRowProps, b: SidebarSessionRowProps): boolean {
   return (
     a.session === b.session &&
+    a.subagentControl === b.subagentControl &&
     a.isPinned === b.isPinned &&
     a.isSelected === b.isSelected &&
     a.unread === b.unread &&

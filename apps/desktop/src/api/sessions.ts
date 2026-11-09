@@ -466,6 +466,48 @@ export function getSession(id: string, profile?: ProfileScope): Promise<SessionI
   })
 }
 
+export interface SessionSubagentsPage {
+  sessions: SessionInfo[]
+  total: number
+  limit: number
+  offset: number
+  has_more: boolean
+}
+
+/** Direct children only; never merge these into the top-level session page. */
+export async function listSessionSubagents(
+  id: string,
+  profile?: ProfileScope,
+  page: { limit?: number; offset?: number } = {}
+): Promise<SessionSubagentsPage> {
+  const scope = { ...connectionScoped(), ...sessionScoped(profile), ...sessionReadOwnerPin(id, profile) }
+  const ownerProfile = scope.profile || getApiRequestProfile() || 'default'
+  const connectionId = scope.connectionId || ambientOwnerConnectionId()
+
+  const query = new URLSearchParams({
+    profile: ownerProfile,
+    limit: String(Math.min(100, Math.max(1, Math.trunc(page.limit ?? 50)))),
+    offset: String(Math.max(0, Math.trunc(page.offset ?? 0)))
+  })
+
+  const result = await hermesApi<SessionSubagentsPage>({
+    ...scope,
+    profile: ownerProfile,
+    path: `/api/sessions/${encodeURIComponent(id)}/subagents?${query}`,
+    timeoutMs: SESSION_LIST_REQUEST_TIMEOUT_MS
+  })
+
+  return {
+    ...result,
+    sessions: result.sessions.map(session => ({
+      ...session,
+      profile: ownerProfile,
+      ...(connectionId ? { connection_id: connectionId } : {}),
+      is_internal_child: true
+    }))
+  }
+}
+
 // Reads another profile's transcript. For a remote profile Electron reroutes
 // this GET to the remote backend (which serves its own state.db); for a local
 // profile the primary opens that profile's state.db via ?profile=. Omit for
