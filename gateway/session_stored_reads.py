@@ -56,7 +56,8 @@ TRANSCRIPT_FIELDS = frozenset({'session_id', 'profile', 'subagent_id', 'cursor',
 
 
 def handlers(connection):
-    return {'session.transcript': partial(transcript, connection)}
+    from gateway.session_transcript_subagent import subagent_locate
+    return {'session.transcript': partial(transcript, connection), 'subagent.locate': partial(subagent_locate, connection)}
 
 
 def _readable_target(connection, ref, params):

@@ -44241,6 +44241,95 @@
         "title": "SubagentListResult",
         "type": "object"
       },
+      "SubagentLocateChild": {
+        "additionalProperties": false,
+        "properties": {
+          "task_index": {
+            "title": "Task Index",
+            "type": "integer"
+          },
+          "child_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Child Session Id"
+          },
+          "running": {
+            "default": false,
+            "title": "Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "task_index"
+        ],
+        "title": "SubagentLocateChild",
+        "type": "object"
+      },
+      "SubagentLocateParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tool_call_id": {
+            "title": "Tool Call Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "tool_call_id"
+        ],
+        "title": "SubagentLocateParams",
+        "type": "object"
+      },
+      "SubagentLocateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tool_call_id": {
+            "title": "Tool Call Id",
+            "type": "string"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/SubagentLocateChild"
+            },
+            "title": "Children",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_id",
+          "tool_call_id",
+          "children"
+        ],
+        "title": "SubagentLocateResult",
+        "type": "object"
+      },
       "SubagentOutputTailEntry": {
         "additionalProperties": false,
         "description": "``tools/delegate_tool_results.py::_extract_output_tail`` row.",
@@ -50527,6 +50616,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ShellExecResult"
+        }
+      }
+    },
+    {
+      "name": "subagent.locate",
+      "summary": "The stored subagent session behind each task of one `delegate_task` call of the session, so a transcript card opens its subagents after the live roster forgot them (finished, reloaded, restarted). A subagent counts only when it is a delegate child of this conversation's lineage: ids the call's result names (`child_session_ids`, `subagent_ids`, a settled entry's `child_session_id`) win; a result that names none (calls stored before those keys existed) links the delegate child that started after the call with that task's goal, calls claiming in the order they were made. Unproven tasks are null. Refusals: invalid_params, not_found, permission_denied.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SubagentLocateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SubagentLocateResult"
         }
       }
     },

@@ -460,3 +460,33 @@ class SessionStoredReadsMixin:
             f"{_sql_json_extract('model_config', '$.' + marker_key)} = ? ORDER BY started_at DESC, id DESC",
             (subagent_id,))
         return [row["id"] for row in rows]
+
+    def subagent_rows_under(self, parent_ids: Iterable[str]) -> list[dict[str, Any]]:
+        """The ``source='subagent'`` sessions whose ``parent_session_id`` is one of *parent_ids*, oldest
+        ``started_at`` first (ties: id), each with ``delegate_from`` and ``subagent_marker`` (its
+        ``model_config`` ``_delegate_from`` / ``_subagent_id``) and ``first_user`` (the content of its first
+        user message: a delegated child's goal). The caller proves which edges are delegations.
+
+        Storage interface: port as ``subagent_rows_under``."""
+        from hermes_state_common import _sql_json_extract
+        rows = self._read_all(
+            "SELECT s.id, s.parent_session_id, s.started_at, s.ended_at, s.end_reason, "
+            f"{_sql_json_extract('s.model_config', '$._delegate_from')} AS delegate_from, "
+            f"{_sql_json_extract('s.model_config', '$._subagent_id')} AS subagent_marker, "
+            "(SELECT m.content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' "
+            " ORDER BY m.id LIMIT 1) AS first_user "
+            "FROM sessions s WHERE s.source = 'subagent' AND s.parent_session_id IN (SELECT value FROM json_each(?)) "
+            "ORDER BY s.started_at, s.id", (_ids(parent_ids),))
+        return [dict(row) for row in rows]
+
+    def delegate_call_rows(self, session_ids: Iterable[str]) -> list[dict[str, Any]]:
+        """The messages of *session_ids* that can hold a ``delegate_task`` call or its result, in insertion
+        order: assistant rows whose ``tool_calls`` name it and ``delegate_task`` tool results.
+
+        Storage interface: port as ``delegate_call_rows``."""
+        rows = self._read_all(
+            "SELECT session_id, role, tool_calls, tool_call_id, content, timestamp FROM messages "
+            "WHERE session_id IN (SELECT value FROM json_each(?)) AND ((role = 'assistant' AND "
+            "instr(tool_calls, 'delegate_task') > 0) OR (role = 'tool' AND tool_name = 'delegate_task')) "
+            "ORDER BY id", (_ids(session_ids),))
+        return [dict(row) for row in rows]

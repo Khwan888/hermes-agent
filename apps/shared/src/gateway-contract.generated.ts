@@ -5560,6 +5560,21 @@ export interface StoredTranscriptRow {
   truncated?: boolean | null
   [key: string]: unknown
 }
+export interface SubagentLocateParams {
+  profile?: string | null
+  session_id: string
+  tool_call_id: string
+}
+export interface SubagentLocateResult {
+  session_id: string
+  tool_call_id: string
+  children: SubagentLocateChild[]
+}
+export interface SubagentLocateChild {
+  task_index: number
+  child_session_id?: string | null
+  running?: boolean
+}
 /** Open: the plugin's handler owns every other key. ``session_id`` names the session the call acts in and passes that session's authorization first. */
 export interface PluginRpcParams {
   session_id?: string | null
@@ -7145,6 +7160,8 @@ export interface CanonicalRpcMethods {
   'session.transcript': { params: StoredTranscriptParams; result: StoredTranscriptResult }
   /** Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one safe command for a local session, in its frozen launch cwd (``gateway/session_shell.py``). */
   'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
+  /** The stored subagent session behind each task of one `delegate_task` call of the session, so a transcript card opens its subagents after the live roster forgot them (finished, reloaded, restarted). A subagent counts only when it is a delegate child of this conversation's lineage: ids the call's result names (`child_session_ids`, `subagent_ids`, a settled entry's `child_session_id`) win; a result that names none (calls stored before those keys existed) links the delegate child that started after the call with that task's goal, calls claiming in the order they were made. Unproven tasks are null. Refusals: invalid_params, not_found, permission_denied. */
+  'subagent.locate': { params: SubagentLocateParams; result: SubagentLocateResult }
   /** Adopt a registered execution after verifying the live producer claim. */
   'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
   /** Sequence-fenced typed persistence write from an adopted worker. */
@@ -7204,6 +7221,7 @@ export const CANONICAL_RPC_METHODS = [
   'session.steer',
   'session.transcript',
   'shell.exec',
+  'subagent.locate',
   'worker.adopt',
   'worker.persist',
   'worker.register'

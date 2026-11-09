@@ -62,3 +62,45 @@ def _read(authority, live, ref, binding, held, limit, inline_images):
                                profile_home=authority.profile_id, inline_images=inline_images)
     return {'session_id': ref.session_id, **page, 'subagent_id': subagent_id, 'available': True,
             'running': running, 'child_session_id': child}
+
+async def subagent_locate(connection, ref, params):
+    """``subagent.locate``: the stored subagent session of each task of one ``delegate_task`` call
+    (``tools.delegate_tool_sessions.delegate_call_children``), under the parent's read authority."""
+    tool_call_id = params.get('tool_call_id')
+    if (set(params) - {'session_id', 'profile', 'tool_call_id'} or not isinstance(ref.session_id, str)
+            or not ref.session_id or not isinstance(tool_call_id, str) or not tool_call_id):
+        raise RuntimeStoreError('invalid_params')
+    authority = connection.authority
+    if ref.session_id not in authority.sessions:
+        raise RuntimeStoreError('not_found')
+    authorize(connection, ref, params, 'session:read')
+    return await asyncio.to_thread(_locate, authority, authority.sessions[ref.session_id], ref, tool_call_id)
+
+
+def _locate(authority, live, ref, tool_call_id):
+    from gateway.session_ancillary import (
+        _compression_lineage, _owner_objects, locked_projection, physical_target)
+    from gateway.session_authorities import owner_scope
+    from tools.delegate_tool_sessions import delegate_call_children
+
+    def roster():
+        from gateway.session_history_mount import is_history_mount
+        target = physical_target(authority, ref)
+        if is_history_mount(live):
+            # A history mount owns no writer route. Read only records tied to
+            # this stored lineage and profile DB, never objects from a reused route.
+            from gateway.session_ancillary import subagent_records
+            records = subagent_records(None, target, session_db=authority.db)
+        else:
+            from gateway.session_ancillary import _require_current_route
+            _require_current_route(authority, ref)
+            records = _owner_objects(authority, ref, include_fallback_evicted=True)[1]
+        running = {getattr(r.get('agent'), 'session_id', None) for r in records}
+        return running, target
+
+    with owner_scope(authority):
+        running, target = locked_projection(authority, live, ref, roster)
+        found = delegate_call_children(authority.db, _compression_lineage(authority.db, target), tool_call_id) or []
+    return {'session_id': ref.session_id, 'tool_call_id': tool_call_id,
+            'children': [{'task_index': i, 'child_session_id': child, 'running': bool(child) and child in running}
+                         for i, child in enumerate(found)]}

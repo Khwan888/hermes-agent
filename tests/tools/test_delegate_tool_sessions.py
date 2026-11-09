@@ -83,3 +83,207 @@ def test_a_finished_child_resolves_to_its_continuation_after_a_backward_clock_st
         assert stored_child_session(db, "sa-0-clock", ["parent"]) == "clock-tip"
     finally:
         db.close()
+
+
+def _call(db, session, call_id, goals, ts, result=None):
+    """A stored ``delegate_task`` call of *goals* at *ts* and its tool result."""
+    import json
+    db.append_message(session, role="assistant", content="", timestamp=ts, tool_calls=[{
+        "id": call_id, "type": "function",
+        "function": {"name": "delegate_task", "arguments": json.dumps({"tasks": [{"goal": g} for g in goals]})}}])
+    db.append_message(session, role="tool", tool_name="delegate_task", tool_call_id=call_id, timestamp=ts + 0.5,
+                      content=json.dumps(result if result is not None else {"status": "dispatched", "goals": goals}))
+
+
+def _child(db, sid, parent, goal, started, suffix="", **marker):
+    """A delegate child whose first user message is its goal (the task's ``context`` goes into its system
+    prompt, not this message), plus *suffix* when the delegate tool wrapped it."""
+    db.create_session(sid, source="subagent", parent_session_id=parent,
+                      model_config={"_delegate_from": parent, **marker})
+    db._execute_write(lambda conn: conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?", (started, sid)))
+    db.append_message(sid, role="user", content=goal + suffix)
+
+
+def test_cards_written_before_any_child_id_link_their_subagents_through_the_stored_delegation(tmp_path):
+    """Most stored subagents predate ``_subagent_id`` and their call results name no child: each task still
+    links to the delegate child that started after its call with that task's goal, earlier calls claim
+    first, and a branch or another conversation's subagent with the same goal never links."""
+    from hermes_state import SessionDB
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = SessionDB(db_path=tmp_path / "state.db")
+    try:
+        db.create_session("parent", source="cli")
+        db.create_session("other", source="cli")
+        _call(db, "parent", "call-1", ["review the plan", "write tests"], 1000.0)
+        _call(db, "parent", "call-2", ["review the plan"], 2000.0)
+        _child(db, "c1-review", "parent", "review the plan", 1000.4)
+        _child(db, "c1-tests", "parent", "write tests", 1000.3)
+        _child(db, "c2-review", "parent", "review the plan", 2000.2)
+        _child(db, "elsewhere", "other", "write tests", 1000.1)
+        db.create_session("branch", source="subagent", parent_session_id="parent",
+                          model_config={"_branched_from": "parent"})
+        db.append_message("branch", role="user", content="review the plan")
+        assert delegate_call_children(db, ["parent"], "call-1") == ["c1-review", "c1-tests"]
+        assert delegate_call_children(db, ["parent"], "call-2") == ["c2-review"]
+        assert delegate_call_children(db, ["other"], "call-1") is None
+        assert delegate_call_children(db, ["parent"], "no-such-call") is None
+    finally:
+        db.close()
+
+
+def test_a_call_whose_result_names_its_children_links_exactly_and_ignores_foreign_ids(tmp_path):
+    from hermes_state import SessionDB
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = SessionDB(db_path=tmp_path / "state.db")
+    try:
+        db.create_session("parent", source="cli")
+        db.create_session("other", source="cli")
+        _child(db, "foreign", "other", "same goal", 1000.2)
+        # Two children with the same goal: only the ids in the result can tell them apart.
+        _child(db, "by-marker", "parent", "same goal", 1000.1, _subagent_id="sa-0-aaaa")
+        _child(db, "by-id", "parent", "same goal", 1000.3)
+        _call(db, "parent", "call-1", ["same goal", "same goal", "same goal"], 1000.0, result={
+            "status": "dispatched", "subagent_ids": ["sa-0-aaaa", None, None],
+            "child_session_ids": [None, "by-id", "foreign"]})
+        # The foreign id is not this conversation's delegate child; nothing else is left to link.
+        assert delegate_call_children(db, ["parent"], "call-1") == ["by-marker", "by-id", None]
+    finally:
+        db.close()
+
+
+def test_a_settled_result_entry_names_its_child_and_a_rotated_child_opens_at_its_newest_segment(tmp_path):
+    from hermes_state import SessionDB
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = SessionDB(db_path=tmp_path / "state.db")
+    try:
+        db.create_session("parent", source="cli")
+        _child(db, "root", "parent", "long task", 1000.1)
+        db.end_session("root", "compression")
+        db.create_session("tip", source="subagent", parent_session_id="root",
+                          model_config={"_delegate_from": "parent"})
+        _call(db, "parent", "call-1", ["long task"], 1000.0, result={
+            "results": [{"task_index": 0, "status": "completed", "child_session_id": "root"}]})
+        assert delegate_call_children(db, ["parent"], "call-1") == ["tip"]
+    finally:
+        db.close()
+
+
+def _legacy_db(tmp_path):
+    from hermes_state import SessionDB
+    db = SessionDB(db_path=tmp_path / "state.db")
+    db.create_session("parent", source="cli")
+    return db
+
+
+def test_a_goal_that_prefixes_a_sibling_goal_never_takes_the_siblings_child(tmp_path):
+    """``Review auth`` and ``Review auth tests`` in one batch, the second child started first: each task
+    opens its own child (exact goals are allocated before any wrapped-goal fallback)."""
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "call-1", ["Review auth", "Review auth tests"], 1000.0)
+        _child(db, "c-tests", "parent", "Review auth tests", 1000.1)
+        _child(db, "c-auth", "parent", "Review auth", 1000.2)
+        assert delegate_call_children(db, ["parent"], "call-1") == ["c-auth", "c-tests"]
+    finally:
+        db.close()
+
+
+def test_repeated_identical_goals_link_in_start_order_only_when_the_order_is_known(tmp_path):
+    """Identical exact goals in one batch go out by ``started_at`` (tasks start in task order); a tie, or
+    fewer children than tasks, cannot say which task ran which child, so those tasks stay None."""
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "ordered", ["lint", "lint"], 1000.0)
+        _child(db, "lint-2", "parent", "lint", 1000.3)
+        _child(db, "lint-1", "parent", "lint", 1000.2)
+        _call(db, "parent", "tied", ["fmt", "fmt", "other"], 2000.0)
+        _child(db, "fmt-a", "parent", "fmt", 2000.2)
+        _child(db, "fmt-b", "parent", "fmt", 2000.2)
+        _child(db, "other", "parent", "other", 2000.3)
+        _call(db, "parent", "short", ["docs", "docs"], 3000.0)
+        _child(db, "docs-1", "parent", "docs", 3000.2)
+        assert delegate_call_children(db, ["parent"], "ordered") == ["lint-1", "lint-2"]
+        assert delegate_call_children(db, ["parent"], "tied") == [None, None, "other"]
+        assert delegate_call_children(db, ["parent"], "short") == [None, None]
+    finally:
+        db.close()
+
+
+def test_exact_ids_and_legacy_goals_mix_in_one_batch(tmp_path):
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        _child(db, "named", "parent", "Review auth", 1000.1, _subagent_id="sa-1-bbbb")
+        _child(db, "legacy", "parent", "Review auth", 1000.2)
+        _call(db, "parent", "call-1", ["Review auth", "Review auth"], 1000.0,
+              result={"status": "dispatched", "subagent_ids": ["sa-1-bbbb"]})
+        assert delegate_call_children(db, ["parent"], "call-1") == ["legacy", "named"]
+    finally:
+        db.close()
+
+
+def test_a_wrapped_goal_links_only_through_the_delegate_tools_own_wrapper_and_only_when_unique(tmp_path):
+    """The worktree note / image hints the delegate tool appends still link; any other suffix is another goal,
+    and two wrapped candidates for one task leave it None."""
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "wrapped", ["Fix bug", "Add docs"], 1000.0)
+        _child(db, "fix", "parent", "Fix bug", 1000.1, suffix="\n\n[WORKTREE ISOLATION] You are working in ...")
+        _child(db, "docs", "parent", "Add docs", 1000.2, suffix="\n\n[Image attached at: /tmp/a.png]")
+        _call(db, "parent", "unknown", ["Review auth"], 2000.0)
+        _child(db, "other-goal", "parent", "Review auth", 2000.1, suffix=" tests")
+        _child(db, "other-text", "parent", "Review auth", 2000.2, suffix="\n\nContext: from the parent")
+        _call(db, "parent", "ambiguous", ["Ship it"], 3000.0)
+        _child(db, "ship-a", "parent", "Ship it", 3000.1, suffix="\n\n[WORKTREE ISOLATION] a")
+        _child(db, "ship-b", "parent", "Ship it", 3000.2, suffix="\n\n[WORKTREE ISOLATION] b")
+        assert delegate_call_children(db, ["parent"], "wrapped") == ["fix", "docs"]
+        assert delegate_call_children(db, ["parent"], "unknown") == [None]
+        assert delegate_call_children(db, ["parent"], "ambiguous") == [None]
+    finally:
+        db.close()
+
+
+def test_a_multimodal_first_message_links_by_its_text_part(tmp_path):
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "call-1", ["Describe the chart"], 1000.0)
+        db.create_session("vision", source="subagent", parent_session_id="parent",
+                          model_config={"_delegate_from": "parent"})
+        db._execute_write(lambda conn: conn.execute("UPDATE sessions SET started_at = 1000.1 WHERE id = 'vision'"))
+        db.append_message("vision", role="user", content=[
+            {"type": "text", "text": "Describe the chart"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}])
+        assert delegate_call_children(db, ["parent"], "call-1") == ["vision"]
+    finally:
+        db.close()
+
+
+def test_every_result_names_each_child_session_by_task_so_its_card_reopens_it():
+    """A background call's dispatch handle lists each task's own stored session by task index (a refused
+    task is None), and every settled or fabricated entry names its child; a child that never got a session
+    names nothing."""
+    import dataclasses
+    from types import SimpleNamespace
+    from tools.delegate_tool_child_run import _SchemaOutcome, _build_result_entry, _fabricated_entry
+    from tools.delegate_tool_dispatch import _Batch, _dispatched_payload
+
+    child = SimpleNamespace(model="m", session_estimated_cost_usd=0.0, session_cost_status="unknown",
+                            session_prompt_tokens=1, session_completion_tokens=1, _delegate_role="leaf",
+                            session_id="child-0", _subagent_id="sa-0-abcd1234")
+    entry = _build_result_entry(child, {"final_response": "ok", "completed": True}, 0, 1.0,
+                                _SchemaOutcome(None, None, [], 0))
+    assert (entry["subagent_id"], entry["child_session_id"]) == ("sa-0-abcd1234", "child-0")
+    assert _fabricated_entry(0, "error", "boom", child)["child_session_id"] == "child-0"
+    assert "child_session_id" not in _fabricated_entry(0, "error", "boom", None)
+
+    later = SimpleNamespace(session_id="child-2", _subagent_id="sa-2-ffff0000")
+    fields = {f.name: None for f in dataclasses.fields(_Batch) if f.default is dataclasses.MISSING}
+    batch = _Batch(**{**fields, "task_list": [{"goal": "a"}, {"goal": "refused"}, {"goal": "c"}],
+                      "children": [(0, None, child), (2, None, later)], "live_paths": [], "refused": None})
+    payload = _dispatched_payload(batch, [(batch, "deleg_1")])
+    assert payload["child_session_ids"] == ["child-0", None, "child-2"]
+    assert payload["subagent_ids"] == ["sa-0-abcd1234", "sa-2-ffff0000"]
