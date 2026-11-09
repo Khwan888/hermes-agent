@@ -113,13 +113,61 @@ interface SessionSubagentChildrenProps {
   owner: SessionInfo
 }
 
+// One row per child lineage: a rotated (compressed) child's new tip replaces its old row in place.
+const childKey = (session: SessionInfo) => sessionTreeKey(session, session._lineage_root_id || session.id)
+
+interface LoadedChildren {
+  sessions: SessionInfo[]
+  /** Server rows the loaded window covers; the next page starts here. Stale rows never count. */
+  loaded: number
+  has_more: boolean
+}
+
+/** Append a later page; a lineage already loaded keeps its position and takes the fresh row. */
+function appendPage(previous: LoadedChildren | null, next: SessionSubagentsPage): LoadedChildren {
+  const fresh = new Map(next.sessions.map(session => [childKey(session), session]))
+  const kept = (previous?.sessions ?? []).map(session => fresh.get(childKey(session)) ?? session)
+  const seen = new Set(kept.map(childKey))
+  const loaded = next.offset + next.sessions.length
+
+  return {
+    sessions: [...kept, ...next.sessions.filter(session => !seen.has(childKey(session)))],
+    loaded,
+    has_more: loaded < next.total
+  }
+}
+
+/**
+ * Reconcile a re-read first page: it is authoritative for the range it covers, so a deleted child
+ * leaves and a rotated one is replaced. Rows loaded past that range (later pages) are kept in place;
+ * they follow the last row both reads share, and paging continues after them.
+ */
+function refreshPage(previous: LoadedChildren | null, next: SessionSubagentsPage): LoadedChildren {
+  const fresh = new Set(next.sessions.map(childKey))
+  const old = previous?.sessions ?? []
+  const complete = next.sessions.length >= next.total
+  const lastShared = old.findLastIndex(session => fresh.has(childKey(session)))
+
+  const tail =
+    complete || lastShared < 0 ? [] : old.slice(lastShared + 1).filter(session => !fresh.has(childKey(session)))
+
+  const loaded = next.sessions.length + tail.length
+
+  return { sessions: [...next.sessions, ...tail], loaded, has_more: loaded < next.total }
+}
+
+type ChildrenLoad = 'more' | 'refresh'
+
 function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSubagentChildrenProps) {
   const { t } = useI18n()
   const h = t.sidebar.subagents
-  const [page, setPage] = useState<SessionSubagentsPage | null>(null)
+  const [page, setPage] = useState<LoadedChildren | null>(null)
   const [loading, setLoading] = useState(true)
-  const [failed, setFailed] = useState(false)
+  // Which read failed, so Retry repeats it: a failed refresh re-reads the first page, not the next one.
+  const [failed, setFailed] = useState<ChildrenLoad | null>(null)
   const mounted = useRef(false)
+  // Reads reconcile against the latest window, not a render-time snapshot.
+  const pageRef = useRef<LoadedChildren | null>(null)
   const offset = useRef(0)
   const busy = useRef(false)
   const scope = { connectionId: owner.connection_id, profile: owner.profile || 'default' }
@@ -127,9 +175,9 @@ function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSu
   // A second request while one is in flight is coalesced: a pending first-page refresh runs after it.
   const refreshPending = useRef(false)
 
-  // `more` reads the next page; `refresh` re-reads the first page (new children sort first) and
-  // keeps every page already loaded, so focus and scroll stay put.
-  const load = async (mode: 'more' | 'refresh' = 'more') => {
+  // `more` reads the next page; `refresh` re-reads the first page (new children sort first) over the
+  // loaded window and reconciles it, so loaded rows keep their place, focus and scroll.
+  const load = async (mode: ChildrenLoad = 'more') => {
     if (busy.current) {
       refreshPending.current ||= mode === 'refresh'
 
@@ -142,11 +190,12 @@ function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSu
       setLoading(true)
     }
 
-    setFailed(false)
+    setFailed(null)
 
     try {
       const next = await listSessionSubagents(owner.id, scope, {
-        limit: 50,
+        // A refresh covers the loaded window when it fits the endpoint's page cap.
+        limit: mode === 'refresh' ? Math.min(100, Math.max(50, offset.current)) : 50,
         offset: mode === 'refresh' ? 0 : offset.current
       })
 
@@ -154,32 +203,15 @@ function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSu
         return
       }
 
-      offset.current = Math.max(offset.current, next.offset + next.sessions.length)
-      setPage(previous => {
-        const ordered =
-          mode === 'refresh'
-            ? [...next.sessions, ...(previous?.sessions ?? [])]
-            : [...(previous?.sessions ?? []), ...next.sessions]
-
-        // First position wins (new children on top, loaded rows in place); the fresh reply's row wins.
-        const fresh = new Map(next.sessions.map(session => [sessionTreeKey(session), session]))
-        const sessions = new Map<string, SessionInfo>()
-
-        for (const session of ordered) {
-          const key = sessionTreeKey(session)
-
-          if (!sessions.has(key)) {
-            sessions.set(key, fresh.get(key) ?? session)
-          }
-        }
-
-        const rows = [...sessions.values()]
-
-        return { ...next, sessions: rows, has_more: rows.length < next.total }
-      })
+      const reconcile = mode === 'refresh' ? refreshPage : appendPage
+      const result = reconcile(pageRef.current, next)
+      pageRef.current = result
+      offset.current = result.loaded
+      setPage(result)
     } catch {
-      if (mounted.current && mode === 'more') {
-        setFailed(true)
+      // Loaded rows stay (stale) with an inline Retry; nothing retries on its own.
+      if (mounted.current) {
+        setFailed(mode)
       }
     } finally {
       busy.current = false
@@ -238,7 +270,7 @@ function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSu
           data-subagent-depth={depth}
           isPinned={Boolean(session.pinned)}
           isSelected={actions.activeSessionId === session.id}
-          key={sessionTreeKey(session)}
+          key={childKey(session)}
           onArchive={() => actions.onArchiveSession(session.id)}
           onBranch={actions.onBranchSession ? () => actions.onBranchSession?.(session.id, session.profile) : undefined}
           onDelete={() => actions.onDeleteSession(session.id)}
@@ -258,7 +290,7 @@ function SessionSubagentChildren({ actions, ancestors, depth, owner }: SessionSu
       {failed && (
         <div className="text-xs text-(--ui-text-tertiary)" role="status">
           {h.loadFailed}{' '}
-          <Button onClick={() => void load()} size="inline" variant="text">
+          <Button onClick={() => void load(failed)} size="inline" variant="text">
             {h.retry}
           </Button>
         </div>
