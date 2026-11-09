@@ -273,6 +273,37 @@ def get_sessions(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@list_router.get("/api/sessions/{session_id}/subagents")
+def get_session_subagents(
+    session_id: str, profile: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+):
+    """Direct subagents, including finished runs, without changing parent pagination."""
+    from hermes_cli.session_listing import query_session_subagents
+
+    row_profile = _serving_profile(profile)
+    with (http_failure("GET /api/sessions/subagents failed", 500, detail="Internal server error"),
+          corrupt_store_as_status(_session_db_path_for_profile(profile))):
+        def read(db):
+            sid = _resolve_session_id(db, session_id)
+            if not sid:
+                raise HTTPException(status_code=404, detail=_NOT_FOUND)
+            page = query_session_subagents(db, sid, limit=limit, offset=offset)
+            now = time.time()
+            for row in page["sessions"]:
+                row.update(profile=row_profile, is_default_profile=row_profile == "default",
+                           is_active=_is_active(row, now), archived=bool(row.get("archived")),
+                           pinned=bool(row.get("pinned")))
+            _strip_session_list_rows(page["sessions"])
+            return page
+        try:
+            return _with_db(profile, read, read_only=True)
+        except sqlite3.OperationalError as exc:
+            if not is_transient_sqlite_error(exc):
+                raise
+            raise HTTPException(status_code=503, detail="Session store is busy. Retry.") from exc
+
+
 def _is_compression_edge(child: dict, parent: dict) -> bool:
     parent_ended_at = parent.get("ended_at")
     started_at = child.get("started_at")

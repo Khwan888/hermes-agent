@@ -49,6 +49,128 @@ def subagent_listing_scope(
     return True, [s for s in excluded if s != SUBAGENT_SOURCE] or None
 
 
+# Match markers to this edge: rotations inherit model_config, so marker presence
+# alone would turn every compressed subagent segment into another subagent.
+def _compression_edge_sql() -> str:
+    from hermes_state_common import _non_continuation_child_sql
+
+    return ("COALESCE(parent.end_reason = 'compression', 0) "
+            "AND child.profile_name IS parent.profile_name "
+            "AND COALESCE(child.source, '') = COALESCE(parent.source, '') "
+            + _non_continuation_child_sql('child.', 'parent.id'))
+
+
+def _subagent_child_sql() -> str:
+    """``child`` is a subagent of ``parent`` (the one predicate every subagent count and roll-up shares)."""
+    from hermes_state_common import _sql_json_extract, _legacy_reset_child_sql, _RESET_END_REASONS_SQL
+
+    compression = _compression_edge_sql()
+    delegate = _sql_json_extract('child.model_config', '$._delegate_from')
+    branch = _sql_json_extract('child.model_config', '$._branched_from')
+    reset = _sql_json_extract('child.model_config', '$._reset_from')
+    return f"""child.profile_name IS parent.profile_name AND child.hidden = 0
+          AND COALESCE({branch}, '') != parent.id
+          AND COALESCE({reset}, '') != parent.id
+          AND NOT COALESCE(parent.end_reason = 'branched'
+                           AND child.started_at >= parent.ended_at, 0)
+          AND NOT ({_legacy_reset_child_sql('child', _RESET_END_REASONS_SQL)})
+          AND ({delegate} = parent.id OR
+               (child.source = 'subagent' AND NOT ({compression})))"""
+
+
+def _subagent_family_sql(session_ids: list[str]) -> str:
+    compression = _compression_edge_sql()
+    return f"""WITH RECURSIVE family(owner_id, id) AS (
+        SELECT id, id FROM sessions WHERE id IN ({','.join('?' for _ in session_ids)})
+        UNION
+        SELECT f.owner_id, parent.id FROM family f
+        JOIN sessions child ON child.id = f.id
+        JOIN sessions parent ON parent.id = child.parent_session_id
+        WHERE {compression}
+        UNION
+        SELECT f.owner_id, child.id FROM family f
+        JOIN sessions parent ON parent.id = f.id
+        JOIN sessions child ON child.parent_session_id = parent.id
+        WHERE {compression}
+    ), subagents AS (
+        SELECT DISTINCT f.owner_id, child.id FROM family f
+        JOIN sessions parent ON parent.id = f.id
+        JOIN sessions child ON child.parent_session_id = parent.id
+        WHERE {_subagent_child_sql()}
+    ) """
+
+
+def annotate_subagent_counts(db: Any, sessions: list[dict[str, Any]]) -> None:
+    """Add direct (not recursive) subagent counts after the parent page is cut.
+
+    Shared by every rich listing, including the cross-profile sidebar. Only
+    this store's page ids seed the walk; transcripts and off-page rows are not
+    hydrated. Archived/empty subagents remain discoverable; hidden subagents do not.
+    """
+    from hermes_state_common import _id_chunks
+
+    counts = {}
+    for ids in _id_chunks([s['id'] for s in sessions]):
+        rows = db._read_all(_subagent_family_sql(ids) +
+                            "SELECT owner_id, COUNT(*) AS n FROM subagents GROUP BY owner_id", ids)
+        counts.update((row['owner_id'], row['n']) for row in rows)
+    for session in sessions:
+        session['subagent_count'] = counts.get(session['id'], 0)
+
+
+def query_session_subagents(db: Any, session_id: str, *, limit: int, offset: int) -> dict[str, Any]:
+    """A bounded page of direct subagents across the parent's compression lineage.
+
+    Select ids before the normal rich-row projection. No pinned backfill and no
+    transcript reads; a subagent's own compression segments occupy just one slot.
+    """
+    sql = _subagent_family_sql([session_id])
+    total = db._read_one(sql + "SELECT COUNT(*) FROM subagents", [session_id])[0]
+    page = db._read_all(sql + """SELECT h.id FROM subagents h
+        JOIN sessions s ON s.id = h.id
+        ORDER BY s.started_at DESC, s.id DESC LIMIT ? OFFSET ?""", [session_id, limit, offset])
+    ids = [row['id'] for row in page]
+    sessions = _project_subagent_rows(db, ids)
+    annotate_subagent_counts(db, sessions)
+    for session in sessions:
+        session['unread'] = db.session_unread(session)
+    return dict(sessions=sessions, total=total, limit=limit, offset=offset,
+                has_more=offset + len(sessions) < total)
+
+
+def _project_subagent_rows(db: Any, ids: list[str]) -> list[dict[str, Any]]:
+    if not ids:
+        return []
+    # family follows compression only: no nested subagent, branch or reset can
+    # supply a tip. UNION terminates corrupt cycles without a recursive blowup.
+    rows = db._read_all(_subagent_family_sql(ids) + f"""SELECT f.owner_id, f.id,
+        NOT EXISTS (SELECT 1 FROM sessions parent
+                    JOIN sessions child ON child.parent_session_id = parent.id
+                    WHERE parent.id = f.id AND {_compression_edge_sql()}) AS is_tip
+        FROM family f JOIN sessions s ON s.id = f.id
+        ORDER BY s.started_at DESC, s.id DESC""", ids)
+    chains: dict[str, list[str]] = {}
+    tips = {}
+    for row in rows:
+        chains.setdefault(row['owner_id'], []).append(row['id'])
+        if row['is_tip']:
+            tips.setdefault(row['owner_id'], row['id'])
+    rich = db._get_session_rich_rows_batch(set(ids) | set(tips.values()), compact_rows=True)
+    result = []
+    for sid in ids:
+        session = dict(rich[sid])
+        tip = tips.get(sid, sid)
+        if tip != sid:
+            session.update(rich[tip])
+            session.update(started_at=rich[sid]['started_at'],
+                           parent_session_id=rich[sid]['parent_session_id'],
+                           _lineage_root_id=sid, _lineage_ids=chains[sid],
+                           continuation_kind='compression')
+            session['title'] = session.get('title') or rich[sid].get('title')
+        result.append(session)
+    return result
+
+
 def parse_session_listing_args(raw_args: str) -> tuple[bool, bool, str, str | None]:
     """Parse `/sessions`-style args into ``(include_all_sources, include_unnamed, target, search_query)``.
 
