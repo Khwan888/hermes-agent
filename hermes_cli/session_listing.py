@@ -49,14 +49,22 @@ def subagent_listing_scope(
     return True, [s for s in excluded if s != SUBAGENT_SOURCE] or None
 
 
+# An atomic rotation inserts its child moments before stamping the parent's ended_at,
+# so the boundary allows that skew; a subagent the parent spawned earlier predates it.
+_ROTATION_SKEW_SECONDS = 5.0
+
+
 # Match markers to this edge: rotations inherit model_config, so marker presence
-# alone would turn every compressed subagent segment into another subagent.
+# alone would turn every compressed subagent segment into another subagent. An
+# unmarked (source-only) child that started before the rotation is not the
+# continuation, however its parent later ended.
 def _compression_edge_sql() -> str:
     from hermes_state_common import _non_continuation_child_sql
 
     return ("COALESCE(parent.end_reason = 'compression', 0) "
             "AND child.profile_name IS parent.profile_name "
             "AND COALESCE(child.source, '') = COALESCE(parent.source, '') "
+            f"AND COALESCE(child.started_at >= parent.ended_at - {_ROTATION_SKEW_SECONDS}, 1) "
             + _non_continuation_child_sql('child.', 'parent.id'))
 
 
