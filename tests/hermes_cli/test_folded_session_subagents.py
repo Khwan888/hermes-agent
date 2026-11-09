@@ -216,6 +216,39 @@ def test_source_only_subagent_compression_is_not_an_extra_subagent(subagent_clie
     assert leaf["total"] == 0 and leaf["sessions"] == []
 
 
+def test_source_only_subagent_spawned_before_parent_compression_stays_a_subagent(subagent_client):
+    client, home = subagent_client
+    with SessionDB(db_path=home / "state.db") as db:
+        db.create_session("legacy-nested", source="subagent", parent_session_id="alpha")
+        db.append_message("legacy-nested", "user", "Legacy source-only nested goal")
+        # It ran a while before its parent compressed.
+        with db._lock:
+            db._conn.execute("UPDATE sessions SET started_at = started_at - 60 WHERE id = ?",
+                             ("legacy-nested",))
+            db._conn.commit()
+    before = client.get("/api/sessions/alpha/subagents").json()
+    assert {row["id"] for row in before["sessions"]} == {"legacy-nested"}
+    with SessionDB(db_path=home / "state.db") as db:
+        db.create_session("marked-nested", source="subagent", parent_session_id="alpha",
+                          model_config={"_delegate_from": "alpha"})
+        # The real rotation inserts the continuation just before stamping alpha's ended_at.
+        db.publish_compression_child(
+            parent_session_id="alpha", child_session_id="alpha-tip", source="subagent",
+            messages=[{"role": "user", "content": "Question for alpha"}],
+            require_compression_lease=False)
+    for parent in ("alpha", "alpha-tip"):
+        page = client.get(f"/api/sessions/{parent}/subagents").json()
+        assert page["total"] == 2
+        assert {row["id"] for row in page["sessions"]} == {"legacy-nested", "marked-nested"}
+    root = client.get("/api/sessions/root/subagents").json()
+    assert root["total"] == 2
+    rows = {row["id"]: row for row in root["sessions"]}
+    assert set(rows) == {"alpha-tip", "beta"}
+    assert rows["alpha-tip"]["continuation_kind"] == "compression"
+    assert rows["alpha-tip"]["_lineage_root_id"] == "alpha"
+    assert rows["alpha-tip"]["subagent_count"] == 2
+
+
 def test_subagent_route_requires_the_normal_session_token(subagent_client):
     client, _ = subagent_client
     from hermes_cli.web_server import _SESSION_HEADER_NAME
