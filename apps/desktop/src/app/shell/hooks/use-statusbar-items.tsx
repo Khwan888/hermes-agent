@@ -82,6 +82,7 @@ import {
 } from '@/store/updates'
 import type { FreeTierStatus, StatusResponse, UsageStats } from '@/types/hermes'
 
+import { useSubagentPage } from '../../chat/use-subagent-page'
 import { CRON_ROUTE, SETTINGS_ROUTE, WEBHOOKS_ROUTE } from '../../routes'
 import type { StatusbarItem } from '../statusbar-controls'
 
@@ -216,6 +217,7 @@ export function useStatusbarItems({
   // clicking into a tile makes the statusbar describe THAT session.
   const focusedStoredSessionId = useStore($focusedStoredSessionId)
   const focusedRuntimeId = useStore($focusedRuntimeId)
+  const subagentPage = useSubagentPage(focusedStoredSessionId)
   // Whether the FOCUSED session's workspace lives on another machine: a
   // Connections-tagged tile on a remote gateway inside a local-primary window
   // (and vice versa) is decided by the tile's owner route, falling back to the
@@ -832,8 +834,13 @@ export function useStatusbarItems({
   )
 
   const statusbarItems = useMemo(
-    () => [...extraRightItems, ...coreRightStatusbarItems],
-    [coreRightStatusbarItems, extraRightItems]
+    // A lazy viewer has no measurements of its own; the page strip measures its exact child.
+    () => [...extraRightItems, ...coreRightStatusbarItems].map(item =>
+      subagentPage && ['running-timer', 'context-usage', 'cache-hit-rate', 'tokens-per-second'].includes(item.id)
+        ? { ...item, hidden: true }
+        : item
+    ),
+    [coreRightStatusbarItems, extraRightItems, subagentPage]
   )
 
   return { leftStatusbarItems, statusbarItems }

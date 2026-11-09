@@ -1,4 +1,4 @@
-import type { SubagentRoute } from '@hermes/shared'
+import type { SubagentRoute, SubagentUsage } from '@hermes/shared'
 import { atom } from 'nanostores'
 
 import { capitalize } from '@/lib/text'
@@ -26,6 +26,7 @@ export interface SubagentProgress {
   delegationId?: string
   model?: string
   route?: SubagentRoute
+  usage?: SubagentUsage | null
   status: SubagentStatus
   taskCount: number
   taskIndex: number
@@ -267,6 +268,7 @@ function toProgress(
 
   return {
     ...routeFields(payload, prev, parentSessionId),
+    usage: payload.usage === undefined ? prev?.usage : (payload.usage as SubagentUsage | null),
     id: prev?.id ?? idOf(payload),
     parentId: str(payload.parent_id) || prev?.parentId || null,
     goal: str(payload.goal) || prev?.goal || 'Subagent',

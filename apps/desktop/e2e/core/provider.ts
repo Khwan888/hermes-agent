@@ -42,6 +42,12 @@ export interface ToolCallSpec {
 
 /** One provider completion. Chunks are streamed in order: reasoning, text, tool calls. */
 export interface Step {
+  usage?: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    prompt_tokens_details?: { cached_tokens: number }
+  }
   reasoning?: string[]
   text?: string[]
   toolCalls?: ToolCallSpec[]
@@ -245,6 +251,12 @@ export function startScriptedProvider(options: ProviderOptions & { routing?: 'la
     }
 
     res.write(chunk(model, {}, calls.length > 0 ? 'tool_calls' : 'stop'))
+    if (step.usage) {
+      res.write(`data: ${JSON.stringify({
+        id: 'core-e2e', object: 'chat.completion.chunk', created: 0, model, choices: [], usage: step.usage
+      })}\n\n`)
+    }
+
     res.write('data: [DONE]\n\n')
     res.end()
     rec.finished = true
@@ -285,7 +297,7 @@ export function startScriptedProvider(options: ProviderOptions & { routing?: 'la
             }
           }
         ],
-        usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 }
+        usage: step.usage ?? { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 }
       })
     )
   }

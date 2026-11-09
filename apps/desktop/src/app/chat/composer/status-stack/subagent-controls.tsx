@@ -17,6 +17,7 @@ export function SubagentControls({ sessionId, subagentId, text, setText }: Subag
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [failed, setFailed] = useState(false)
+  const [lastSteer, setLastSteer] = useState('')
 
   const send = async (action: 'steer' | 'interrupt') => {
     setPending(true)
@@ -26,7 +27,12 @@ export function SubagentControls({ sessionId, subagentId, text, setText }: Subag
     try {
       // Unlike global chrome, a child control must NEVER fall back to whichever
       // gateway happens to be active, even on a legacy unbound session.
-      const result = await requestForOwnedSession<{ found?: boolean; status?: string }>(
+      const result = await requestForOwnedSession<{
+        found?: boolean
+        status?: string
+        delivered_at?: number | null
+        relayed_to?: unknown[]
+      }>(
         sessionId,
         async () => {
           throw new Error(t.agents.requestRejected)
@@ -39,9 +45,21 @@ export function SubagentControls({ sessionId, subagentId, text, setText }: Subag
         throw new Error(t.agents.requestRejected)
       }
 
-      setFeedback(action === 'steer' ? t.agents.steerQueued : t.agents.stopRequested)
+      const delivered = result.delivered_at != null
+      const relayed = Array.isArray(result.relayed_to) ? result.relayed_to.length : 0
+      setFeedback(
+        action === 'steer'
+          ? delivered
+            ? [
+                t.agents.steerDelivered,
+                ...(relayed ? [t.agents.steerRelayed.replace('{count}', String(relayed))] : [])
+              ].join(' · ')
+            : t.agents.steerQueued
+          : t.agents.stopRequested
+      )
 
       if (action === 'steer') {
+        setLastSteer(text.trim())
         setText('')
       }
     } catch {
@@ -80,6 +98,12 @@ export function SubagentControls({ sessionId, subagentId, text, setText }: Subag
           {t.statusStack.stop}
         </Button>
       </div>
+      {lastSteer && (
+        <p className="text-xs text-(--ui-text-secondary)" data-subagent-steer="">
+          <span>{t.agents.steerLabel}: </span>
+          {lastSteer}
+        </p>
+      )}
       {feedback && (
         <p className="text-xs text-(--ui-text-secondary)" role={failed ? 'alert' : 'status'}>
           {feedback}

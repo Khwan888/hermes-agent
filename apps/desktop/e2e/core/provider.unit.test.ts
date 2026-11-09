@@ -101,3 +101,18 @@ test('a failing route keeps failing on retry; unknown routes 404 without recordi
   expect(provider.completions.every(c => c.route === 'broken' && c.httpStatus === 503 && c.effort === null)).toBe(true)
   expect(provider.completions.every(c => c.sentText === '')).toBe(true)
 })
+
+
+test('page metrics receive the scripted child usage in JSON and choices-empty SSE', async () => {
+  provider = await startScriptedProvider()
+  const usage = { prompt_tokens: 1200, completion_tokens: 60, total_tokens: 1260,
+    prompt_tokens_details: { cached_tokens: 900 } }
+  provider.script('U3-usage', [{ text: ['measured'], usage }])
+  const messages = [user('U3-usage')]
+  expect((await (await post(provider.url, { messages })).json()).usage).toEqual(usage)
+  const stream = await (await post(provider.url, { messages, stream: true })).text()
+  const frames = stream.split('\n\n').filter(line => line.startsWith('data: {'))
+    .map(line => JSON.parse(line.slice(6)))
+  expect(frames.find(frame => frame.usage)).toMatchObject({ choices: [], usage })
+  expect(stream).toContain('data: [DONE]')
+})

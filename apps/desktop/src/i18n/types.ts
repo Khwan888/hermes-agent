@@ -2090,6 +2090,17 @@ export interface Translations extends NoticeTranslations {
     steer: string
     steerPlaceholder: string
     steerQueued: string
+    subagentPage: string
+    subagentFinished: string
+    subagentUnavailable: string
+    metricUnavailable: string
+    subagentContext: string
+    subagentCache: string
+    subagentSpeed: string
+    subagentTimer: string
+    steerLabel: string
+    steerDelivered: string
+    steerRelayed: string
     stopRequested: string
     requestRejected: string
     delegation: (index: number) => string

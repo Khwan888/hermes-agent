@@ -81,6 +81,7 @@ import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { SubagentBackdrop } from './subagent-backdrop'
+import { SubagentPageBar } from './subagent-page-bar'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
 import {
   backfillOlderTranscriptPage,
@@ -90,6 +91,7 @@ import {
 import { advanceSessionTranscriptWindow, type SessionWindowMemo } from './transcript-window'
 import { useChatBarState } from './use-chat-bar-state'
 import { transcriptRuntimeActions, useSubagentPage } from './use-subagent-page'
+import { useSubagentSubject } from './use-subagent-subject'
 import { useTranscriptRetention } from './use-transcript-retention'
 
 interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
@@ -210,6 +212,7 @@ interface ChatRuntimeBoundaryProps {
   /** Route points at an unloaded session — render empty until resume swaps in
    *  the new transcript, so the previous session's messages don't linger. */
   suppressMessages: boolean
+  subagentLiveText?: string | null
 }
 
 const NO_MESSAGES: ChatMessage[] = []
@@ -255,7 +258,8 @@ export function ChatRuntimeBoundary({
   onEdit,
   onReload,
   onThreadMessagesChange,
-  suppressMessages
+  suppressMessages,
+  subagentLiveText
 }: ChatRuntimeBoundaryProps) {
   const view = useSessionView()
   const runtimeId = useStore(view.$runtimeId)
@@ -301,7 +305,29 @@ export function ChatRuntimeBoundary({
   // History is a static display page. The live store continues streaming but
   // no delta subscribes/reconverts this historical runtime until return.
   const storeMessages = useMessagesWhileVisible(view.$messages, !history.page)
-  const messages = suppressMessages ? NO_MESSAGES : storeMessages
+
+  const messages = useMemo(() => {
+    if (suppressMessages) {
+      return NO_MESSAGES
+    }
+
+    if (!subagentLiveText) {
+      return storeMessages
+    }
+
+    // The subject snapshot also catches a stream already in flight before the window opened.
+    const last = storeMessages.at(-1)
+
+    if (last?.role === 'assistant' && last.parts.some(part => part.type === 'text' && part.text === subagentLiveText)) {
+      return storeMessages
+    }
+
+    return [
+      ...storeMessages,
+      { id: 'subagent-live-reply', role: 'assistant' as const, parts: [{ type: 'text' as const, text: subagentLiveText }] }
+    ]
+  }, [subagentLiveText, storeMessages, suppressMessages])
+
 
   const [windowPages, setWindowPages] = useState(1)
   const [windowSessionKey, setWindowSessionKey] = useState(runtimeId)
@@ -468,6 +494,62 @@ export function ChatRuntimeBoundary({
   )
 }
 
+interface RoutedChatStateInput {
+  isPrimary: boolean
+  pathname: string
+  selectedSessionId: string | null
+  sessions: ReturnType<typeof $sessions.get>
+  activeSessionId: string | null
+  gatewaySwapTarget: unknown
+  messagesEmpty: boolean
+  transcriptStoredSessionId: string | null
+  resumeExhaustedSessionId: string | null
+}
+
+function routedChatState({
+  isPrimary,
+  pathname,
+  selectedSessionId,
+  sessions,
+  activeSessionId,
+  gatewaySwapTarget,
+  messagesEmpty,
+  transcriptStoredSessionId,
+  resumeExhaustedSessionId
+}: RoutedChatStateInput) {
+  // A tile IS its session — no route involved, never "mismatched".
+  const routedSessionId = isPrimary ? routeSessionId(pathname) : selectedSessionId
+  const isRoutedSessionView = Boolean(routedSessionId)
+
+  // Derive on render so an unloaded route never paints the previous transcript.
+  const routeSessionMismatch = isPrimary
+    ? isRouteSessionMismatch(routedSessionId, selectedSessionId, sessions, {
+        activeRuntimeId: activeSessionId,
+        contextSwitching: Boolean(gatewaySwapTarget),
+        messagesEmpty,
+        transcriptStoredSessionId
+      })
+    : false
+
+  const resumeExhausted = isPrimary && isRoutedSessionView && resumeExhaustedSessionId === routedSessionId
+
+  const routedHasHistory = Boolean(
+    routedSessionId &&
+    sessions.some(session => sessionMatchesStoredId(session, routedSessionId) && sessionShouldHaveTranscript(session))
+  )
+
+  const loadingSession = routedSessionIsLoading({
+    activeSessionId,
+    knownHistory: routedHasHistory,
+    messagesEmpty,
+    resumeExhausted,
+    routeSessionMismatch,
+    routedSessionView: isRoutedSessionView
+  })
+
+  return { routedSessionId, isRoutedSessionView, routeSessionMismatch, resumeExhausted, loadingSession }
+}
+
 // Memoized: the tile caller (session-tile.tsx) and the contrib surface re-render
 // on idle ticks unrelated to the chat; with stable callback props (hoisted to
 // useCallback at the call sites) memo() lets the whole chat shell skip those.
@@ -620,22 +702,18 @@ const ChatViewContent = memo(function ChatViewContent({
     return onCancel()
   }, [activeSessionId, onCancel, queueSessionKey])
 
-  // A tile IS its session — no route involved, never "mismatched".
-  const routedSessionId = isPrimary ? routeSessionId(location.pathname) : selectedSessionId
-  const isRoutedSessionView = Boolean(routedSessionId)
-
-  // The URL points at a session the store hasn't loaded yet (sidebar / cmd-K /
-  // direct nav). Derived in render so the swap reads instantly: the same frame
-  // the id changes we drop the old transcript and show the loader, instead of
-  // waiting for the resume effect (which paints a frame later) to clear them.
-  const routeSessionMismatch = isPrimary
-    ? isRouteSessionMismatch(routedSessionId, selectedSessionId, sessions, {
-        activeRuntimeId: activeSessionId,
-        contextSwitching: Boolean(gatewaySwapTarget),
-        messagesEmpty,
-        transcriptStoredSessionId
-      })
-    : false
+  const { routedSessionId, isRoutedSessionView, routeSessionMismatch, resumeExhausted, loadingSession } =
+    routedChatState({
+      isPrimary,
+      pathname: location.pathname,
+      selectedSessionId,
+      sessions,
+      activeSessionId,
+      gatewaySwapTarget,
+      messagesEmpty,
+      transcriptStoredSessionId,
+      resumeExhaustedSessionId
+    })
 
   // The compact new-session pop-out skips the wordmark/tagline intro — it's a
   // scratch window, not the full-height empty state. The Appearance toggle
@@ -651,35 +729,8 @@ const ChatViewContent = memo(function ChatViewContent({
     selectedSessionId
   })
 
-  // Session is still loading if the route references a session we haven't
-  // resumed yet. Brand-new routed drafts are empty on purpose once a runtime
-  // is bound. A session the list already knows has history must keep the
-  // loader up until a display-authoritative transcript arrives — including
-  // the unproven warm-cache hold, where the runtime is bound but messages
-  // are still suppressed.
-  //
-  // resumeExhausted: the bounded auto-retry in use-route-resume gave up on this
-  // routed session (gateway RPC + REST fallback failed through every attempt).
-  // Suppress the loader and show an explicit error + manual Retry instead of
-  // spinning forever. Gated on the route matching so a stale latch from another
-  // session can't blank the current one.
-  const resumeExhausted = isPrimary && isRoutedSessionView && resumeExhaustedSessionId === routedSessionId
-
-  const routedHasHistory = Boolean(
-    routedSessionId &&
-    sessions.some(session => sessionMatchesStoredId(session, routedSessionId) && sessionShouldHaveTranscript(session))
-  )
-
-  const loadingSession = routedSessionIsLoading({
-    activeSessionId,
-    knownHistory: routedHasHistory,
-    messagesEmpty,
-    resumeExhausted,
-    routeSessionMismatch,
-    routedSessionView: isRoutedSessionView
-  })
-
   const threadLoading = threadLoadingState(loadingSession, busy, awaitingResponse, lastVisibleIsUser)
+  const subject = useSubagentSubject(activeSessionId, selectedSessionId)
 
   const showChatBar = useShowChatBar({
     loadingSession,
@@ -783,6 +834,7 @@ const ChatViewContent = memo(function ChatViewContent({
         onEdit={onEdit}
         onReload={onReload}
         onThreadMessagesChange={onThreadMessagesChange}
+        subagentLiveText={subject.subject?.live_text}
         suppressMessages={routeSessionMismatch}
       >
         <div
@@ -867,6 +919,17 @@ const ChatViewContent = memo(function ChatViewContent({
           </FloatingComposerSurface>
         )}
       </ChatRuntimeBoundary>
+      {subject.subagentPage && (
+        <SubagentPageBar
+          onRetry={subject.retry}
+          parentSessionId={subject.parentSessionId}
+          running={subject.running}
+          sessionId={activeSessionId}
+          storedSessionId={selectedSessionId}
+          subject={subject.subject}
+          unavailable={subject.unavailable}
+        />
+      )}
     </div>
   )
 })

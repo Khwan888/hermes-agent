@@ -363,6 +363,16 @@ function asyncResultBody(content: string): string | undefined {
 }
 
 function timelineDisplayContent(message: SessionMessage, content: string): string {
+  if (message.display_kind === 'steer') {
+    // A mid-turn steer (main chat or a subagent's page) stays the user's own row, as resume's
+    // correction reconciliation expects: show the user's words, never the model-facing marker.
+    // Provenance is the backend's typed row, not a marker a model could quote.
+    return content
+      .trim()
+      .replace(/^\[OUT-OF-BAND USER MESSAGE[^\n]*\]\n/, '')
+      .replace(/\n\[\/OUT-OF-BAND USER MESSAGE\]$/, '')
+  }
+
   if (message.display_kind === 'model_switch') {
     return 'model changed'
   }
