@@ -745,6 +745,24 @@
       }
     },
     {
+      "name": "delegation.presets",
+      "summary": "List, save, rename or delete the profile's subagent presets, or choose the one new chats start from.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DelegationPresetsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DelegationPresetsResult"
+        }
+      }
+    },
+    {
       "name": "delegation.settings",
       "summary": "Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy.",
       "params": [
@@ -17101,6 +17119,123 @@
         "title": "DelegationPauseResult",
         "type": "object"
       },
+      "DelegationPreset": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "settings": {
+            "additionalProperties": true,
+            "title": "Settings",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "settings"
+        ],
+        "title": "DelegationPreset",
+        "type": "object"
+      },
+      "DelegationPresetsParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "action": {
+            "default": "list",
+            "enum": [
+              "list",
+              "save",
+              "rename",
+              "delete",
+              "default"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "New Name"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Settings"
+          }
+        },
+        "title": "DelegationPresetsParams",
+        "type": "object"
+      },
+      "DelegationPresetsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/DelegationPreset"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "default_preset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Preset"
+          }
+        },
+        "required": [
+          "presets",
+          "default_preset"
+        ],
+        "title": "DelegationPresetsResult",
+        "type": "object"
+      },
       "DelegationSettingsParams": {
         "additionalProperties": false,
         "properties": {
@@ -17181,6 +17316,18 @@
             "default": false,
             "title": "Pending Schema",
             "type": "boolean"
+          },
+          "preset_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Preset Name"
           }
         },
         "required": [
@@ -50014,6 +50161,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CronSubmitResult"
+        }
+      }
+    },
+    {
+      "name": "delegation.presets",
+      "summary": "List, save, rename or delete the profile's subagent presets, or choose the one new chats start from.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DelegationPresetsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DelegationPresetsResult"
         }
       }
     },

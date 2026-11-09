@@ -212,7 +212,9 @@ def _pinned_config(db, session_id):
 
 
 def initialize_settings(agent, session_id, db, *, ignore_user_config=None):
+    """Seed the chat's policy. True when it starts from the profile defaults (a new, unpinned chat)."""
     inherited = current_settings()
+    agent._delegation_preset_name = None
     state = _stored(db, session_id)
     pin = _pinned_settings(db, session_id)
     pinned = pin.get("delegation_config")
@@ -227,10 +229,48 @@ def initialize_settings(agent, session_id, db, *, ignore_user_config=None):
         config["backend"] = pin["delegation_backend"]
     elif isinstance(state, dict):
         config = state["effective"]
+        agent._delegation_preset_name = state.get("preset_name")
     else:
         config = profile_defaults(ignore_user_config)
     agent._delegation_config = runtime_projection(config)
     agent._delegation_backend = agent._delegation_config.get("backend", "default")
+    return inherited is None and not pin and not isinstance(state, dict)
+
+
+def load_tools_with_policy(agent, session_id, db, load_tools):
+    """Build the chat's tools under its policy. A new chat that actually offers ``delegate_task`` starts
+    from the profile's default subagent preset, if one is set; otherwise the optional library is never read."""
+    from_defaults = initialize_settings(agent, session_id, db)
+    with settings_scope(agent._delegation_config):
+        load_tools()
+    if not from_defaults or "delegate_task" not in (getattr(agent, "valid_tool_names", None) or ()):
+        return
+    config, name = default_preset_config()
+    if name is None:
+        return
+    agent._delegation_preset_name = name
+    config = runtime_projection(config)
+    if config == agent._delegation_config:
+        return
+    agent._delegation_config, agent._delegation_backend = config, config.get("backend", "default")
+    quiet = getattr(agent, "quiet_mode", True)
+    agent.quiet_mode = True  # the tool list was already reported once
+    try:
+        with settings_scope(config):
+            load_tools()
+    finally:
+        agent.quiet_mode = quiet
+
+
+def default_preset_config(ignore_user_config=None):
+    """``(settings, name)`` a new chat starts from: the profile default preset's captured snapshot, or the
+    plain profile defaults with no name. Never raises; bypass chats and safe workers never read the library."""
+    defaults = profile_defaults(ignore_user_config)
+    if user_config_ignored(ignore_user_config):
+        return defaults, None
+    from agent.subagent_presets import default_preset
+    name, preset = default_preset()
+    return ({**defaults, **preset}, name) if preset else (defaults, None)
 
 
 def settings_for_session(db=None, session_id="", agent=None, *, ignore_user_config=None):
@@ -249,9 +289,11 @@ def settings_for_session(db=None, session_id="", agent=None, *, ignore_user_conf
     # Writes refuse credentials; the read projection applies the same classifier as a second boundary.
     public_override = {k: _without_secrets(v, (k,)) for k, v in override.items() if k in _EDITABLE} \
         if override is not None else None
+    preset_name = state.get("preset_name") if state else getattr(agent, "_delegation_preset_name", None)
     return {"pending_schema": pending, "override": public_override,
             "effective": _public(effective), "defaults": _public(defaults),
-            "available_backends": [b.name for b in list_backends() if b.available]}
+            "available_backends": [b.name for b in list_backends() if b.available],
+            "preset_name": preset_name if isinstance(preset_name, str) else None}
 
 
 def update_settings(db, session_id, *, override=_MISSING, ignore_user_config=None):
@@ -288,6 +330,7 @@ def apply_settings_at_turn(agent):
     with settings_scope(config):
         refresh_agent_mcp_tools(agent, quiet_mode=True, content_aware=True)
     agent._delegation_config, agent._delegation_backend = config, config["backend"]
+    agent._delegation_preset_name = state.get("preset_name")
     persist_agent_tool_names(agent)  # route-only edits also survive eviction/restart
     changed = before != agent.tools
     if changed:
@@ -298,6 +341,7 @@ def apply_settings_at_turn(agent):
 
 def commit_global_switch(agent, config):
     """An explicit /delegation --now supersedes any older pending chat selection too."""
+    agent._delegation_preset_name = None
     db, sid = getattr(agent, "_session_db", None), getattr(agent, "session_id", "")
     if db and sid:
         db.patch_session_model_config(sid, {_KEY: {"override": None,

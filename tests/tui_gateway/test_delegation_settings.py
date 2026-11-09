@@ -30,3 +30,21 @@ def test_legacy_settings_boot_read_write_and_transport_authority(tmp_path, monke
         assert foreign["error"]["code"] == 4001
         draft = server.dispatch({"id": 2, "method": "delegation.settings", "params": {}}, transport=transport)
         assert draft["result"]["override"] is None
+
+
+def test_legacy_presets_manage_the_profile_library(tmp_path, monkeypatch):
+    from tui_gateway import server
+
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    transport = SimpleNamespace(write=lambda frame: True)
+
+    def call(**params):
+        return server.dispatch({"id": 1, "method": "delegation.presets", "params": params}, transport=transport)
+
+    assert call()["result"] == {"presets": [], "default_preset": None}
+    saved = call(action="save", name="team", settings={"model": "m", "max_spawn_depth": 2})["result"]
+    assert saved["presets"][0]["settings"]["max_spawn_depth"] == 2
+    assert call(action="default", name="team")["result"]["default_preset"] == "team"
+    assert call(action="rename", name="team", new_name="renamed")["result"]["default_preset"] == "renamed"
+    assert call(action="delete", name="missing")["error"]["code"] == 4000
+    assert call(action="delete", name="renamed")["result"] == {"presets": [], "default_preset": None}

@@ -2150,10 +2150,8 @@ def init_agent(
     _set_defaults(agent, _STREAM_STATE)
     _build_client(agent, api_key, base_url, fallback_model)
     _init_fallback_chain(agent, fallback_model)
-    from agent.delegation_settings import initialize_settings, settings_scope
-    initialize_settings(agent, session_id, session_db)
-    with settings_scope(agent._delegation_config):
-        _load_tools(agent, enabled_toolsets, disabled_toolsets)
+    from agent.delegation_settings import load_tools_with_policy
+    load_tools_with_policy(agent, session_id, session_db, lambda: _load_tools(agent, enabled_toolsets, disabled_toolsets))
     _init_session_state(
         agent, session_id, session_db, parent_session_id, reasoning_config, max_tokens,
         checkpoints_enabled, checkpoint_max_snapshots, checkpoint_max_total_size_mb, checkpoint_max_file_size_mb,

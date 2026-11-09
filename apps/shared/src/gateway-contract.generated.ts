@@ -1398,6 +1398,22 @@ export interface DelegationSettingsResult {
   defaults: Record<string, unknown>
   available_backends: string[]
   pending_schema?: boolean
+  preset_name?: string | null
+}
+export interface DelegationPresetsParams {
+  profile?: string | null
+  action?: 'list' | 'save' | 'rename' | 'delete' | 'default'
+  name?: string | null
+  new_name?: string | null
+  settings?: Record<string, unknown> | null
+}
+export interface DelegationPresetsResult {
+  presets: DelegationPreset[]
+  default_preset: string | null
+}
+export interface DelegationPreset {
+  name: string
+  settings: Record<string, unknown>
 }
 /** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. */
 export interface DisplayStatus {
@@ -6367,6 +6383,8 @@ export interface RpcMethods {
   'cron.manage': { params: CronManageParams; result: CronManageResult }
   /** Block/unblock NEW spawns globally (active children keep running); returns the new state. */
   'delegation.pause': { params: DelegationPauseParams; result: DelegationPauseResult }
+  /** List, save, rename or delete the profile's subagent presets, or choose the one new chats start from. */
+  'delegation.presets': { params: DelegationPresetsParams; result: DelegationPresetsResult }
   /** Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy. */
   'delegation.settings': { params: DelegationSettingsParams; result: DelegationSettingsResult }
   /** Running subagent tree plus the spawn pause flag and limits. */
@@ -6855,6 +6873,7 @@ export const RPC_METHODS = [
   'connectors.tools',
   'cron.manage',
   'delegation.pause',
+  'delegation.presets',
   'delegation.settings',
   'delegation.status',
   'diagnostics.share_nous',
@@ -7103,6 +7122,8 @@ export interface CanonicalRpcMethods {
   'cron.status': { params: CronAdmissionParams; result: CronStatusResult }
   /** Admit one cron firing into the owning profile's durable FIFO. */
   'cron.submit': { params: CronRunParams; result: CronSubmitResult }
+  /** List, save, rename or delete the profile's subagent presets, or choose the one new chats start from. */
+  'delegation.presets': { params: DelegationPresetsParams; result: DelegationPresetsResult }
   /** Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy. */
   'delegation.settings': { params: DelegationSettingsParams; result: DelegationSettingsResult }
   'groups.approve': { params: CanonicalRoomApproveParams; result: GroupsApproveResult }
@@ -7187,6 +7208,7 @@ export const CANONICAL_RPC_METHODS = [
   'cron.recover',
   'cron.status',
   'cron.submit',
+  'delegation.presets',
   'delegation.settings',
   'groups.approve',
   'groups.attachment.download',

@@ -1,4 +1,4 @@
-"""Unselected policy preserves the default tool/route; optional libraries are never read."""
+"""Unselected policy preserves the default tool/route; an optional library never breaks a chat."""
 
 import json
 import types
@@ -94,21 +94,16 @@ def test_safe_worker_uses_only_its_frozen_delegation_config(tmp_path):
     assert result == {"model": "worker-model", "reads": []}
 
 
-def test_ordinary_agent_construction_does_not_open_a_preset_file(options_backend, monkeypatch):
-    from pathlib import Path
+def test_ordinary_agent_construction_survives_a_malformed_preset_file(options_backend):
+    """The optional library is read only for a new chat that can delegate, and never stops it starting."""
     from tests.agent.test_delegation_switch_next_session import _agent
 
     srv, home = options_backend
     (home / "subagent-presets.json").write_text("not JSON")
-    original = Path.open
-
-    def guarded(path, *args, **kwargs):
-        assert path.name != "subagent-presets.json", "ordinary construction must not read an optional library"
-        return original(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "open", guarded)
     parent = _agent(srv, home, "no-preset-io")
     try:
         assert parent._delegation_config["max_spawn_depth"] == 1
+        assert parent._delegation_preset_name is None
+        assert (home / "subagent-presets.json").read_text() == "not JSON"
     finally:
         parent.close()

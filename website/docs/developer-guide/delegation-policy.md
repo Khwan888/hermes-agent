@@ -26,4 +26,20 @@ Snapshots store credential references, not credential values. Each credential be
 
 The new create field is optional and old payloads remain accepted. Older gateways implement neither `delegation.settings` nor the create field (they reject `delegation_override` as `invalid_params`). Clients must check availability first and omit the field when it is unavailable, never falling back to a profile-wide write. Older tool pins without a full policy snapshot can retain their captured backend, but cannot recover route values that were never stored.
 
-No preset file is read or adopted by ordinary initialization. Preset storage and any client settings UI are separate features.
+## Profile subagent presets
+
+A profile can keep named presets in `subagent-presets.json` in its Hermes home. Desktop manages them under **Settings → Model → Subagents**; both native transports expose `delegation.presets`:
+
+```json
+{"method":"delegation.presets","params":{}}
+{"method":"delegation.presets","params":{"action":"save","name":"fast-team","settings":{"model":"child-model","max_spawn_depth":2}}}
+{"method":"delegation.presets","params":{"action":"rename","name":"fast-team","new_name":"research"}}
+{"method":"delegation.presets","params":{"action":"default","name":"research"}}
+{"method":"delegation.presets","params":{"action":"delete","name":"research"}}
+```
+
+Every call returns `{presets: [{name, settings}], default_preset}`. A saved preset is a snapshot of the profile defaults at save time plus the supplied fields (`{}` saves the current defaults); it uses the same field validation as `override` and keeps credential references, never values. `default` with `name: null` clears the default. Reads need session read access; changes are profile-wide writes, so the native gateway accepts them only from the profile's operator connection. Writes are serialized by a lock file next to the library and replace it atomically.
+
+A new chat that is given `delegate_task` and has no explicit override starts from the default preset; `delegation.settings` reports its name as `preset_name`. Only then is the library read. Existing chats, resumed chats and running children keep what they captured, so renaming, deleting or changing the default affects new chats only. Resetting a chat's override (`null`) returns it to the plain profile defaults. Ignore-user-config chats and managed workers never read the library.
+
+The library is optional. A missing, empty or malformed file never stops a chat from starting: chats fall back to the profile defaults and a warning is logged. Management calls report the problem instead, and the file is left untouched so it can be repaired. Older gateways do not implement `delegation.presets`; clients should hide preset controls on method-not-found.

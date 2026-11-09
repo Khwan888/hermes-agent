@@ -464,17 +464,18 @@ def build_policy(params, config, *, private_secrets=None, profile_terminal=True,
         # supersedes it. Without it the first turn's followed route replaces the pick.
         config.setdefault('model', {})['selection_profile'] = list(profile_target(config))
     _apply_launch_overrides(params, config)
-    from gateway.session_delegation_settings import creation_settings
-    try:
-        config["_delegation_settings"] = creation_settings(params, config, ignore_user_config=ignore_user_config)
-    except ValueError as exc:
-        _refuse("delegation_override", str(exc))
     # The posture is opt-in (``session.create`` only) and needs a folder the client named: the daemon's own
     # directory (the fallback above) is no workspace, and ``tool`` is a third-party integration. An explicit
     # pick wins anyway; skipping it here also spares the probe.
     named = workspace_posture and source != 'tool' and 'cwd' in params and 'toolsets' not in params
     coding_posture = named and _in_coding_workspace(config, source, cwd)
     enabled = _resolve_toolsets(params, config, source, safe_mode, coding_posture, bypass=ignore_user_config)
+    from gateway.session_delegation_settings import creation_settings, offers_delegation
+    try:
+        config["_delegation_settings"] = creation_settings(params, config, ignore_user_config=ignore_user_config,
+                                                           offers_delegation=offers_delegation(enabled))
+    except ValueError as exc:
+        _refuse("delegation_override", str(exc))
     terminal = build_profile_terminal_scope(get_hermes_home()) if profile_terminal else default_terminal_scope()
     # The client's launch folder is a path on THIS host: a remote or container backend keeps its own
     # configured cwd unless the user picked this folder for the session.

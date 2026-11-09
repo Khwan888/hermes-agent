@@ -32,5 +32,15 @@ def delegation_settings_rpc(rid, params):
         return _err(rid, 4000, str(exc))
 
 
+@method("delegation.presets")
+@_profile_scoped
+def subagent_presets_rpc(rid, params):
+    from agent.subagent_presets import presets
+    try:
+        return _ok(rid, presets(**{k: params[k] for k in ("action", "name", "new_name", "settings") if k in params}))
+    except ValueError as exc:
+        return _err(rid, 4000, str(exc))
+
+
 def register(server):
     bind_module(globals(), server)
