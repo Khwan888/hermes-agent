@@ -1464,6 +1464,8 @@ class SessionSessionsMixin:
         if heads:
             from hermes_state_local import annotate_local_lineages
             sessions = annotate_local_lineages(sessions, heads)
+        from hermes_cli.session_listing import annotate_subagent_counts
+        annotate_subagent_counts(self, sessions)
         # last_read_at is lineage-stamped, so root and tip watermarks agree.
         for s in sessions:
             s["unread"] = self.session_unread(s)

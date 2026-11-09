@@ -384,6 +384,14 @@ def _profiles_failed(errors: list[dict[str, str]]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _sidebar_stores_fingerprint():
+    """DB+WAL identity of every served profile store (stat only, no open). A write anywhere
+    obsoletes a coalesced scan: a parent row's subagent count changes when a child is created,
+    hidden or removed, with no change to the request's own arguments."""
+    return tuple((str(home), _sidebar_db_fingerprint(_profile_state_db(home)))
+                 for _name, home in _profile_targets("sidebar cache"))
+
+
 def _sidebar_singleflight_cache(func):
     """Coalesce concurrent sidebar scans and briefly reuse their response.
 
@@ -416,7 +424,8 @@ def _sidebar_singleflight_cache(func):
 
         bound = signature.bind(*args, **kwargs)
         bound.apply_defaults()
-        key = tuple(bound.arguments.items())
+        # Coalesce bursts of identical scans of UNCHANGED stores only; a store write re-scans.
+        key = (tuple(bound.arguments.items()), _sidebar_stores_fingerprint())
         cached = _lookup(key)
         if cached is not miss:
             return cached

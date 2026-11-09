@@ -70,6 +70,25 @@ class SidebarCacheTests(unittest.TestCase):
         self.assertEqual(calls, 1)
         self.assertEqual(second, {"profile": "all", "rows": [{"limit": 20}]})
 
+    def test_a_store_write_obsoletes_a_coalesced_scan_within_the_ttl(self):
+        # A new child changes its parent's subagent count without changing the request: a burst
+        # may reuse a scan of an unchanged store, never one of a written store.
+        calls = 0
+        fingerprints = iter([("v1",), ("v1",), ("v2",), ("v2",)])
+
+        @profiles._sidebar_singleflight_cache
+        def scan(profile="all"):
+            nonlocal calls
+            calls += 1
+            return {"generation": calls}
+
+        with mock.patch.object(profiles, "_sidebar_stores_fingerprint", side_effect=lambda: next(fingerprints), create=True):
+            self.assertEqual(scan(), {"generation": 1})
+            self.assertEqual(scan(), {"generation": 1})
+            self.assertEqual(scan(), {"generation": 2})
+            self.assertEqual(scan(), {"generation": 2})
+        self.assertEqual(calls, 2)
+
     def test_coalesces_concurrent_identical_scans(self):
         workers = 12
         entered = threading.Event()
