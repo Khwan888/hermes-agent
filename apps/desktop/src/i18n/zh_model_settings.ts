@@ -1,5 +1,6 @@
 import type { TranslationOverride } from '@hermes/shared/i18n'
 
+import { subagentPresetsCopy } from './subagent-presets'
 import type { ModelSettingsTranslations } from './types_model_settings'
 import { zhAuxTasks } from './zh_aux_tasks'
 import { zhDelegationRouting } from './zh_delegation_routing'
@@ -74,6 +75,7 @@ export const zhModelSettings: TranslationOverride<ModelSettingsTranslations> = {
     directClear: '应用此路由会清除直接端点及其保存的密钥。其他请求设置保持不变。',
     catalogFailed: '模型目录不可用。请手动输入提供商和模型，或重试。',
     draftHint: '应用前，更改仅保留在本地。',
-    routing: zhDelegationRouting
+    routing: zhDelegationRouting,
+    presets: subagentPresetsCopy.zh
   }
 }

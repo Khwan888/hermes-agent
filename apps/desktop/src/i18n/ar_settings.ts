@@ -2,6 +2,7 @@ import { arDelegationRouting } from './ar_delegation_routing'
 import { arMemoryLayers } from './ar_memory_layers'
 import { arUpdateChannel } from './ar_update_channel'
 import type { TranslationOverrides } from './define-locale'
+import { subagentPresetsCopy } from './subagent-presets'
 
 export const arSettings = {
   language: {
@@ -926,7 +927,8 @@ export const arSettings = {
         directClear: 'تطبيق هذا المسار يمسح نقطة النهاية المباشرة ومفتاحها المحفوظ. تبقى إعدادات الطلب الأخرى كما هي.',
         catalogFailed: 'كتالوج النماذج غير متاح. أدخل الموفّر والنموذج يدويًا أو أعد المحاولة.',
         draftHint: 'تبقى التغييرات محلية حتى تطبيقها.',
-        routing: arDelegationRouting
+        routing: arDelegationRouting,
+        presets: subagentPresetsCopy.ar
       }
     },
     providers: {

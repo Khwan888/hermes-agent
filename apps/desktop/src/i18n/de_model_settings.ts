@@ -2,6 +2,7 @@ import type { TranslationOverride } from '@hermes/shared/i18n'
 
 import { deAuxTasks } from './de_aux_tasks'
 import { deDelegationRouting } from './de_delegation_routing'
+import { subagentPresetsCopy } from './subagent-presets'
 import type { ModelSettingsTranslations } from './types_model_settings'
 
 export const deModelSettings: TranslationOverride<ModelSettingsTranslations> = {
@@ -82,6 +83,7 @@ export const deModelSettings: TranslationOverride<ModelSettingsTranslations> = {
       'Diese Route entfernt den direkten Endpunkt und seinen gespeicherten Schlüssel. Andere Anfrage-Einstellungen bleiben erhalten.',
     catalogFailed: 'Modellkatalog nicht verfügbar. Anbieter und Modell manuell eingeben oder erneut versuchen.',
     draftHint: 'Änderungen bleiben lokal, bis sie übernommen werden.',
-    routing: deDelegationRouting
+    routing: deDelegationRouting,
+    presets: subagentPresetsCopy.de
   }
 }

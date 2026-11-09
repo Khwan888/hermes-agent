@@ -27,6 +27,7 @@ import {
   refreshDelegationRouting,
   useDelegationRouting
 } from './routing-data'
+import { SubagentPresetsSection } from './subagent-presets'
 
 interface DelegationRoutingSlotProps {
   sectionId: string
@@ -78,6 +79,7 @@ export function DelegationRoutingSection({ scope }: { scope: ProfileScope }) {
           </div>
         )}
       </SettingsSection>
+      <SubagentPresetsSection scope={scope} />
       <SectionHeading icon={SlidersHorizontal} title={r.settingsTitle} />
     </>
   )

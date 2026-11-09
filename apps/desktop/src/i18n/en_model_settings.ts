@@ -1,5 +1,6 @@
 import { enAuxTasks } from './en_aux_tasks'
 import { enDelegationRouting } from './en_delegation_routing'
+import { subagentPresetsCopy } from './subagent-presets'
 import type { ModelSettingsTranslations } from './types_model_settings'
 
 export const enModelSettings: ModelSettingsTranslations = {
@@ -75,6 +76,7 @@ export const enModelSettings: ModelSettingsTranslations = {
     directClear: 'Applying this route clears the direct endpoint and its stored key. Other request settings are kept.',
     catalogFailed: 'Model catalog unavailable. Enter a provider and model manually, or retry.',
     draftHint: 'Changes stay local until applied.',
-    routing: enDelegationRouting
+    routing: enDelegationRouting,
+    presets: subagentPresetsCopy.en
   }
 }

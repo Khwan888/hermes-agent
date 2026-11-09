@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DelegationRouting } from '@/api/delegation'
 import type { HermesApiRequest } from '@/global'
@@ -8,6 +8,8 @@ import { queryClient } from '@/lib/query-client'
 
 import { DelegationRoutingSection } from './routing-section'
 import { SubagentModelGate } from './subagent-model-gate'
+
+vi.mock('./subagent-presets', () => ({ SubagentPresetsSection: () => null }))
 
 // A stateful stand-in for the backend's /api/delegation routes (same shapes, same refusal).
 let routing: DelegationRouting

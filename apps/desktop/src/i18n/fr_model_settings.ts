@@ -2,6 +2,7 @@ import type { TranslationOverride } from '@hermes/shared/i18n'
 
 import { frAuxTasks } from './fr_aux_tasks'
 import { frDelegationRouting } from './fr_delegation_routing'
+import { subagentPresetsCopy } from './subagent-presets'
 import type { ModelSettingsTranslations } from './types_model_settings'
 
 export const frModelSettings: TranslationOverride<ModelSettingsTranslations> = {
@@ -85,6 +86,7 @@ export const frModelSettings: TranslationOverride<ModelSettingsTranslations> = {
     catalogFailed:
       'Catalogue de modèles indisponible. Saisissez un fournisseur et un modèle manuellement, ou réessayez.',
     draftHint: "Les modifications restent locales jusqu'à leur application.",
-    routing: frDelegationRouting
+    routing: frDelegationRouting,
+    presets: subagentPresetsCopy.fr
   }
 }
