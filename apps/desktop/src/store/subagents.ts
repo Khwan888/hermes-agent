@@ -1,3 +1,4 @@
+import type { SubagentRoute } from '@hermes/shared'
 import { atom } from 'nanostores'
 
 import { capitalize } from '@/lib/text'
@@ -15,6 +16,8 @@ export interface SubagentStreamEntry {
 export interface SubagentProgress {
   id: string
   parentId: null | string
+  /** Stored session owning this roster (not the parent subagent runtime id). */
+  parentSessionId?: string
   goal: string
   /** The child's own stored session id — lets UIs open its session window. */
   sessionId?: string
@@ -22,6 +25,7 @@ export interface SubagentProgress {
    *  so concurrent/nested batches never merge into one group. */
   delegationId?: string
   model?: string
+  route?: SubagentRoute
   status: SubagentStatus
   taskCount: number
   taskIndex: number
@@ -86,6 +90,46 @@ const isStr = (v: unknown): v is string => typeof v === 'string'
 const str = (v: unknown) => (isStr(v) ? v : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const strList = (v: unknown) => (Array.isArray(v) ? v.filter(isStr) : [])
+
+const nullableStr = (v: unknown) => (isStr(v) ? v : null)
+
+function asRoute(value: unknown): SubagentRoute | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  const route = value as Record<string, unknown>
+
+  return {
+    provider: nullableStr(route.provider),
+    model: nullableStr(route.model),
+    requested_effort: nullableStr(route.requested_effort),
+    wire_effort: nullableStr(route.wire_effort),
+    effective_effort: nullableStr(route.effective_effort),
+    effort_source:
+      route.effort_source === 'configured' || route.effort_source === 'default' ? route.effort_source : 'unknown',
+    reasoning_status:
+      route.reasoning_status === 'enabled' || route.reasoning_status === 'disabled'
+        ? route.reasoning_status
+        : 'unknown',
+    observed: route.observed === true,
+    fallback_activated: typeof route.fallback_activated === 'boolean' ? route.fallback_activated : null
+  }
+}
+
+function routeFields(
+  payload: SubagentPayload,
+  prev: SubagentProgress | undefined,
+  parentSessionId?: string
+): Pick<SubagentProgress, 'model' | 'route' | 'parentSessionId'> {
+  const route = asRoute(payload.route) ?? prev?.route
+
+  return {
+    model: route?.model || str(payload.model) || prev?.model,
+    route,
+    parentSessionId: parentSessionId ?? prev?.parentSessionId
+  }
+}
 
 const asStatus = (v: unknown, terminalEvent = false): SubagentStatus => {
   if (v === 'completed' || v === 'failed' || v === 'interrupted') {
@@ -208,7 +252,12 @@ function streamFromPayload(
   return out
 }
 
-function toProgress(payload: SubagentPayload, prev: SubagentProgress | undefined, eventType = ''): SubagentProgress {
+function toProgress(
+  payload: SubagentPayload,
+  prev: SubagentProgress | undefined,
+  eventType = '',
+  parentSessionId?: string
+): SubagentProgress {
   const at = Date.now()
   const status = asStatus(payload.status, eventType === 'subagent.complete')
   const tool = str(payload.tool_name)
@@ -217,12 +266,12 @@ function toProgress(payload: SubagentPayload, prev: SubagentProgress | undefined
   const filesWritten = strList(payload.files_written)
 
   return {
+    ...routeFields(payload, prev, parentSessionId),
     id: prev?.id ?? idOf(payload),
     parentId: str(payload.parent_id) || prev?.parentId || null,
     goal: str(payload.goal) || prev?.goal || 'Subagent',
     sessionId: str(payload.child_session_id) || prev?.sessionId,
     delegationId: str(payload.delegation_id) || prev?.delegationId,
-    model: str(payload.model) || prev?.model,
     status,
     taskCount: num(payload.task_count) ?? prev?.taskCount ?? 1,
     taskIndex: num(payload.task_index) ?? prev?.taskIndex ?? 0,
@@ -271,7 +320,7 @@ export function reconcileSubagentSnapshot(
       continue
     }
 
-    const projected = toProgress(payload, prev)
+    const projected = toProgress(payload, prev, '', sid)
     projected.startedAt = (num(payload.started_at) ?? 0) * 1000 || prev?.startedAt || projected.startedAt
     projected.updatedAt = prev?.updatedAt ?? projected.startedAt
 
@@ -305,7 +354,7 @@ export function reconcileSubagentSnapshot(
     const startedAt = (num(payload.dispatched_at) ?? 0) * 1000 || at
 
     next.push({
-      ...toProgress({ ...payload, subagent_id: id, summary: str(payload.error) }, undefined, 'subagent.complete'),
+      ...toProgress({ ...payload, subagent_id: id, summary: str(payload.error) }, undefined, 'subagent.complete', sid),
       durationSeconds: Math.max(0, Math.round((at - startedAt) / 1000)),
       id,
       startedAt,
@@ -391,7 +440,7 @@ export function upsertSubagent(sid: string, payload: SubagentPayload, createIfMi
     return
   }
 
-  const next = toProgress(payload, prev, eventType)
+  const next = toProgress(payload, prev, eventType, sid)
   const nextList = idx >= 0 ? list.map(item => (item.id === id ? next : item)) : [...list, next]
 
   setSessionSubagents(sid, list, nextList)

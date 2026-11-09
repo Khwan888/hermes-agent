@@ -1419,6 +1419,13 @@ export const jaOverrides = {
     emptyDesc: 'Hermes がスキルやメモリを蓄積すると、ここに表示されます。'
   },
   agents: {
+    providerUnknown: 'プロバイダー不明',
+    modelUnknown: 'モデル不明',
+    reasoningOff: '推論オフ',
+    effortUnknown: '推論レベル不明',
+    routeFallback: 'フォールバック',
+    defaultEffort: effort => `${effort}（デフォルト）`,
+    configuredEffort: effort => `${effort}（設定値・未確認）`,
     extendedTranscript: '詳細な実行ログ',
     transcriptTruncated: '最新の 16 KiB を表示',
     transcriptUnavailable: 'ライブログは利用できません',

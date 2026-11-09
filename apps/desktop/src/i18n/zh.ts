@@ -2213,6 +2213,13 @@ export const zhOverrides = {
     resetToMine: '返回我的图谱'
   },
   agents: {
+    providerUnknown: '提供商未知',
+    modelUnknown: '模型未知',
+    reasoningOff: '推理已关闭',
+    effortUnknown: '推理强度未知',
+    routeFallback: '备用路由',
+    defaultEffort: effort => `${effort}（默认）`,
+    configuredEffort: effort => `${effort}（已配置，尚未观测）`,
     extendedTranscript: '扩展记录',
     transcriptTruncated: '显示最新 16 KiB',
     transcriptUnavailable: '实时记录不可用',

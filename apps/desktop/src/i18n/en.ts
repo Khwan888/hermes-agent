@@ -2283,6 +2283,13 @@ export const en: Translations = {
   },
   gatewayGroupOpen: enGatewayGroupOpen,
   agents: {
+    providerUnknown: 'Provider unknown',
+    modelUnknown: 'Model unknown',
+    reasoningOff: 'Reasoning off',
+    effortUnknown: 'Effort unknown',
+    routeFallback: 'Fallback',
+    defaultEffort: effort => `${effort} (default)`,
+    configuredEffort: effort => `${effort} (configured, not yet observed)`,
     extendedTranscript: 'Extended transcript',
     transcriptTruncated: 'Showing the latest 16 KiB',
     transcriptUnavailable: 'Live transcript unavailable',

@@ -2062,6 +2062,14 @@ export interface Translations extends NoticeTranslations {
   }
   gatewayGroupOpen: GatewayGroupOpenCopy
   agents: {
+    providerUnknown: string
+    modelUnknown: string
+    reasoningOff: string
+    effortUnknown: string
+    routeFallback: string
+    defaultEffort: (effort: string) => string
+    /** Configured effort shown before any request on the route was observed. */
+    configuredEffort: (effort: string) => string
     extendedTranscript: string
     transcriptTruncated: string
     transcriptUnavailable: string

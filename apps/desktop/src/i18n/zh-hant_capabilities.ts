@@ -109,6 +109,13 @@ export const zhHantCapabilities = {
   },
 
   agents: {
+    providerUnknown: '供應商未知',
+    modelUnknown: '模型未知',
+    reasoningOff: '推理已關閉',
+    effortUnknown: '推理強度未知',
+    routeFallback: '備援路由',
+    defaultEffort: effort => `${effort}（預設）`,
+    configuredEffort: effort => `${effort}（已設定，尚未觀測）`,
     extendedTranscript: '完整記錄尾端',
     transcriptTruncated: '顯示最新 16 KiB',
     transcriptUnavailable: '即時記錄無法使用',

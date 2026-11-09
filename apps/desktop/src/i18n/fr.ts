@@ -2660,6 +2660,13 @@ export const frOverrides = {
     resetToMine: 'Retour à ma carte'
   },
   agents: {
+    providerUnknown: 'Fournisseur inconnu',
+    modelUnknown: 'Modèle inconnu',
+    reasoningOff: 'Raisonnement désactivé',
+    effortUnknown: 'Effort inconnu',
+    routeFallback: 'Repli',
+    defaultEffort: effort => `${effort} (par défaut)`,
+    configuredEffort: effort => `${effort} (configuré, pas encore observé)`,
     extendedTranscript: 'Transcription étendue',
     transcriptTruncated: 'Affichage des 16 Kio les plus récents',
     transcriptUnavailable: 'Transcription en direct indisponible',
