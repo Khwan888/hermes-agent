@@ -18,6 +18,7 @@ from agent.error_classifier import FailoverReason
 from agent.agent_runtime_helpers_placeholders import hidden_interrupt_placeholder_row
 from agent.message_metadata import append_message
 from agent.repetition_guard import REPETITION_LOOP_INTERRUPTED, is_runaway_repetition
+from agent.runtime_route import record_runtime_route
 from agent.turn_failure_copy import site_copy, stamp_failure
 
 logger = logging.getLogger("agent.conversation_loop")
@@ -99,14 +100,21 @@ def perform_api_call(
                 sanitize_harmony_tokens=agent._is_codex_backend(),
             )
         if _use_streaming:
+            record_runtime_route(agent, next_api_kwargs)
             return agent._interruptible_streaming_api_call(
                 next_api_kwargs, on_first_delta=_stop_spinner
             )
         from agent import relay_llm
 
+        def _dispatch(final_api_kwargs):
+            # The route a subagent reports is this request: after request and execution
+            # middleware, Relay and preflight, as the provider client receives it.
+            record_runtime_route(agent, final_api_kwargs)
+            return agent._interruptible_api_call(final_api_kwargs)
+
         return relay_llm.execute(
             next_api_kwargs,
-            agent._interruptible_api_call,
+            _dispatch,
             session_id=str(agent.session_id or ""),
             name=str(agent.provider or "provider"),
             model_name=str(agent.model or ""),

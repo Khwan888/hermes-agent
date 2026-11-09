@@ -43969,6 +43969,17 @@
             "default": null,
             "title": "Model"
           },
+          "route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentRoute"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "tool_count": {
             "anyOf": [
               {
@@ -44393,9 +44404,116 @@
         "title": "SubagentRosterResult",
         "type": "object"
       },
+      "SubagentRoute": {
+        "additionalProperties": false,
+        "description": "Secret-free effective route read from the running child, never its launch label.",
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "requested_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Effort"
+          },
+          "wire_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wire Effort"
+          },
+          "effective_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Effort"
+          },
+          "effort_source": {
+            "enum": [
+              "configured",
+              "default",
+              "unknown"
+            ],
+            "title": "Effort Source",
+            "type": "string"
+          },
+          "reasoning_status": {
+            "enum": [
+              "enabled",
+              "disabled",
+              "unknown"
+            ],
+            "title": "Reasoning Status",
+            "type": "string"
+          },
+          "observed": {
+            "title": "Observed",
+            "type": "boolean"
+          },
+          "fallback_activated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Activated"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "requested_effort",
+          "wire_effort",
+          "effective_effort",
+          "effort_source",
+          "reasoning_status",
+          "observed",
+          "fallback_activated"
+        ],
+        "title": "SubagentRoute",
+        "type": "object"
+      },
       "SubagentSnapshot": {
         "additionalProperties": false,
-        "description": "``methods_subagents._SUBAGENT_SNAPSHOT_FIELDS`` projection of one live child record.",
+        "description": "``gateway.session_ancillary.subagent_row`` projection of one live child record.",
         "properties": {
           "subagent_id": {
             "title": "Subagent Id",
@@ -44460,6 +44578,17 @@
             ],
             "default": null,
             "title": "Model"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubagentRoute"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "started_at": {
             "anyOf": [

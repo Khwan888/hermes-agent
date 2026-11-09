@@ -325,6 +325,10 @@ class _ChildProgressRelay:
         for src, dst in (("session_id", "child_session_id"), ("delegation_id", "delegation_id")):
             if self.session_ref.get(src):
                 kw[dst] = str(self.session_ref[src])
+        if (child := self.session_ref.get("_child")) is not None:
+            from agent.runtime_route import runtime_route
+            kw["route"] = runtime_route(child)
+            kw["model"] = kw["route"]["model"]
         kw["tool_count"] = self.tool_count
         return kw
 
@@ -415,6 +419,14 @@ class _ChildProgressRelay:
                 self._flush()
 
     def __call__(self, event_type, tool_name: str | None = None, preview: str | None = None, args=None, **kwargs):
+        # A grandchild already carries its own identity and route. Do not relabel
+        # it as this relay's child, or drop its tool/thinking frames as unknown.
+        if (isinstance(event_type, str) and event_type.startswith("subagent.")
+                and kwargs.get("subagent_id") and kwargs["subagent_id"] != self.subagent_id):
+            if self.parent_cb:
+                with _quiet("Parent callback relay failed: %s"):
+                    self.parent_cb(event_type, tool_name, preview, args, **kwargs)
+            return
         key = _normalize_event(event_type)
         method = None if key is None else _EVENT_HANDLERS.get(key, "_on_tool_started")
         if method is not None:

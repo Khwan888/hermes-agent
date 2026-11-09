@@ -475,6 +475,8 @@ _SUBAGENT_FIELDS = (
 def _subagent_payload(event_type: str, name: str | None, preview, kw: dict, *, show_reasoning: bool) -> dict:
     payload = {"goal": str(kw.get("goal") or ""), "task_count": int(kw.get("task_count") or 1), "task_index": int(kw.get("task_index") or 0)}
     source = {**kw, "tool_name": name, "text": preview}
+    if isinstance(kw.get("route"), dict):
+        payload["route"] = kw["route"]
     for key, present, coerce in _SUBAGENT_FIELDS:
         if present(source.get(key)):
             val = coerce(source[key])

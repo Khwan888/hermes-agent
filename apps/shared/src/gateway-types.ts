@@ -1,5 +1,6 @@
 /** Typed results and events of the gateway's JSON-RPC methods, as a client reads them. */
 import type { UsageModelData } from './billing-types.js'
+import type { SubagentRoute } from './gateway-contract.generated.js'
 import type {
   ConnectionRequestPayload,
   GatewayEvent,
@@ -134,6 +135,8 @@ export type {
   UsageBarData,
   UsageModelData
 } from './billing-types.js'
+
+export type { SubagentRoute } from './gateway-contract.generated.js'
 
 // ── Config ───────────────────────────────────────────────────────────
 
@@ -634,6 +637,7 @@ export interface SubagentListResponse {
     depth?: number | null
     goal?: string | null
     model?: string | null
+    route?: SubagentRoute
     started_at?: number | null
     status?: string | null
     tool_count?: number | null

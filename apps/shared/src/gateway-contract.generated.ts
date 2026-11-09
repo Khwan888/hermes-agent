@@ -2444,7 +2444,7 @@ export interface SubagentListResult {
   subagents?: SubagentSnapshot[]
   delegations?: FailedDelegation[]
 }
-/** ``methods_subagents._SUBAGENT_SNAPSHOT_FIELDS`` projection of one live child record. */
+/** ``gateway.session_ancillary.subagent_row`` projection of one live child record. */
 export interface SubagentSnapshot {
   subagent_id: string
   parent_id?: string | null
@@ -2452,12 +2452,25 @@ export interface SubagentSnapshot {
   goal?: string | null
   delegation_id?: string | null
   model?: string | null
+  route?: SubagentRoute | null
   started_at?: number | null
   status?: SubagentStatus | null
   tool_count?: number | null
   last_tool?: string | null
   accepting_steer?: boolean | null
   child_session_id?: string | null
+}
+/** Secret-free effective route read from the running child, never its launch label. */
+export interface SubagentRoute {
+  provider: string | null
+  model: string | null
+  requested_effort: string | null
+  wire_effort: string | null
+  effective_effort: string | null
+  effort_source: 'configured' | 'default' | 'unknown'
+  reasoning_status: 'enabled' | 'disabled' | 'unknown'
+  observed: boolean
+  fallback_activated: boolean | null
 }
 /** Lifecycle of one delegated child (``tools/delegate_tool_child_run.py``); ``failed`` / ``error`` / ``timeout`` / ``interrupted`` / ``completed`` are terminal. */
 export type SubagentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'error' | 'timeout' | 'interrupted'
@@ -6157,6 +6170,7 @@ export interface SubagentEventPayload {
   delegation_id?: string | null
   depth?: number | null
   model?: string | null
+  route?: SubagentRoute | null
   tool_count?: number | null
   toolsets?: string[] | null
   input_tokens?: number | null
