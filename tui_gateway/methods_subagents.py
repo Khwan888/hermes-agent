@@ -9,10 +9,6 @@ from .method_ctx import HandlerRegistry, bind_module
 _registry = HandlerRegistry()
 method = _registry.method
 
-_SUBAGENT_SNAPSHOT_FIELDS = (
-    "subagent_id", "parent_id", "depth", "goal", "delegation_id", "model",
-    "started_at", "status", "tool_count", "last_tool", "accepting_steer",
-)
 _SUBAGENT_TAIL_BYTES = 16384
 
 
@@ -56,18 +52,13 @@ def _(rid, params):
     transport, owner = _current_session_steer_authority(session_id)
     if transport is None or owner is None:
         return _err(rid, 4001, "session not found or not owned by this transport")
+    from gateway.session_ancillary import subagent_row
+
     live = _visible_subagent_records(session_id, transport, owner)
     return _ok(rid, {
-        "subagents": [{**{key: r.get(key) for key in _SUBAGENT_SNAPSHOT_FIELDS},
-                       "child_session_id": _child_session_id(r)} for r in live],
+        "subagents": [subagent_row(r) for r in live],
         "delegations": _failed_delegations(session_id, owner),
     })
-
-
-def _child_session_id(record):
-    """The child's own stored session (its transcript), as the shared owner's rows name it."""
-    child = getattr(record.get("agent"), "session_id", None)
-    return child if isinstance(child, str) and child else None
 
 
 def _live_work_owners():

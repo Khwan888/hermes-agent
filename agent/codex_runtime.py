@@ -760,9 +760,13 @@ def run_codex_app_server_turn(agent, *, user_message: str, original_user_message
     try:
         _start_codex_thread(agent)
         wire_model = _codex_wire_model(agent, getattr(agent, "_codex_session_model_provider", None))
+        effort = _codex_turn_effort(agent, wire_model)
+        from agent.runtime_route import record_runtime_route
+
+        record_runtime_route(agent, {"model": wire_model, "reasoning_effort": effort})
         turn = agent._codex_session.run_turn(
             user_input=user_message,
-            model=wire_model, reasoning_effort=_codex_turn_effort(agent, wire_model),
+            model=wire_model, reasoning_effort=effort,
             service_tier=_codex_turn_service_tier(agent))
     except Exception as exc:
         logger.exception("codex app-server turn failed")

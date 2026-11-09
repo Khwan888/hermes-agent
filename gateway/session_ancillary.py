@@ -592,8 +592,12 @@ def _compression_lineage(db, session_id):
 def subagent_row(record):
     """One ``subagent.list`` row; ``child_session_id`` is the child's own stored session, the one
     ``session.transcript`` reads for its ``subagent_id``."""
+    from agent.runtime_route import runtime_route
+
     child = getattr(record.get('agent'), 'session_id', None)
+    route = runtime_route(record.get('agent'))
     return {**{key: record.get(key) for key in _SUBAGENT_FIELDS},
+            'model': route['model'], 'route': route,
             'child_session_id': child if isinstance(child, str) and child else None}
 
 

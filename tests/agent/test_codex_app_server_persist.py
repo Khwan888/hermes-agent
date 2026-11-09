@@ -59,6 +59,21 @@ def _make_agent(session_db=None, session_id="sess-codex"):
     agent.session_id = session_id
     return agent
 
+def test_codex_subagent_route_observes_native_turn_effort():
+    from agent.runtime_route import runtime_route
+
+    agent = _make_agent()
+    agent.provider, agent.model = "openai-codex", "gpt-5.6"
+    agent.reasoning_config = {"enabled": True, "effort": "high"}
+    run_codex_app_server_turn(agent, user_message="hi", original_user_message="hi",
+                              messages=[{"role": "user", "content": "hi"}], effective_task_id="child")
+    sent = agent._codex_session.run_turn.call_args.kwargs
+    assert sent["reasoning_effort"] == "high"
+    route = runtime_route(agent)
+    assert (route["model"], route["wire_effort"]) == (sent["model"], "high")
+    assert route["observed"] is True
+
+
 def test_codex_success_flushes_and_reports_persisted():
     """Codex success turn must self-persist and return agent_persisted=True."""
     agent = _make_agent(session_db=None)  # no DB -> flush is a no-op, still True
