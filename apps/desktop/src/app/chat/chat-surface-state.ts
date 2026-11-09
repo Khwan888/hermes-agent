@@ -4,6 +4,7 @@ import { isWatchWindow } from '@/store/windows'
 
 import type { DragKind } from './hooks/use-file-drop-zone'
 import { composerStaysMounted } from './thread-loading'
+import { useSubagentPage } from './use-subagent-page'
 
 interface ShowChatBarOptions {
   loadingSession: boolean
@@ -25,6 +26,7 @@ export function useShowChatBar({
   routedSessionId,
   routedSessionView
 }: ShowChatBarOptions): boolean {
+  const subagentPage = useSubagentPage(routedSessionId)
   const settledRoutedSessionRef = useRef<null | string>(null)
 
   if (!loadingSession && routedSessionView) {
@@ -34,7 +36,7 @@ export function useShowChatBar({
   }
 
   return composerStaysMounted({
-    hideComposer: resumeExhausted || isWatchWindow(),
+    hideComposer: resumeExhausted || isWatchWindow() || subagentPage,
     loadingSession,
     routedSessionId,
     settledRoutedSessionId: settledRoutedSessionRef.current

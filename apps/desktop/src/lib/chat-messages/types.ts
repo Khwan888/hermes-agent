@@ -37,6 +37,7 @@ export type ChatMessage = {
   role: SessionMessage['role']
   parts: ChatMessagePart[]
   /** Result body only; the system text remains the compact completion label. */
+  asyncDelegationId?: string
   asyncResult?: string
   asyncResultKind?: 'process'
   timestamp?: number

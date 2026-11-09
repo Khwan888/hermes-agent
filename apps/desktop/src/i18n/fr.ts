@@ -5264,6 +5264,8 @@ export const frOverrides = {
       statusDone: 'Terminé',
       resultUnavailable: 'Résultat indisponible',
       resultInterrupted: 'Interrompu',
+      delegateSubagentMissing: 'La session enregistrée de cet sous-agent est introuvable',
+      delegateReadOnly: "Sous-agent · Transcription en lecture seule",
       memoryWriteNoted: 'Écriture en mémoire enregistrée',
       actions: {
         read: 'Lu',

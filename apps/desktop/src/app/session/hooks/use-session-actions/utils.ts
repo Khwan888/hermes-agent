@@ -59,6 +59,7 @@ import {
 } from '@/store/session-removal'
 import type { SessionProfileRoute } from '@/store/session-request-router'
 import { runtimeSessionOwner, sessionTileOwnerRoute } from '@/store/session-states'
+import { rememberSubagentPage } from '@/store/subagent-session-cache'
 
 // Re-exported for the many session-actions/tile call sites that already import
 // it from here; the canonical definition lives in @/store/session.
@@ -1823,12 +1824,10 @@ function upsertResolvedSession(
   storedSessionId: string,
   tombstoneGenerationsAtRequestStart: SessionTombstoneGenerationSnapshot
 ) {
-  // Exact-id lookup intentionally resolves internal delegate children so a
-  // watch tile can open them. They are not ordinary user conversations,
-  // though, and the authoritative list endpoints omit them; caching one here
-  // would bypass that boundary and leak it into the Sessions sidebar.
+  // Keep exact-id delegate children off the normal session list. Remember only
+  // page identity so read-only views cannot be mistaken for writable chats.
   if (session.is_internal_child) {
-    return
+    return rememberSubagentPage(session)
   }
 
   const removed = $removedSessionIds.get()

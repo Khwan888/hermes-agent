@@ -4,6 +4,7 @@ import { useStore } from '@nanostores/react'
 import { type FC, type ReactNode, useMemo } from 'react'
 
 import { useSessionView } from '@/app/chat/session-view'
+import { openSubagentForCall } from '@/app/open-subagent'
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
 import { SCAFFOLD_GLYPH_CLASS, SCAFFOLD_LABEL_CLASS, SCAFFOLD_META_CLASS } from '@/components/chat/scaffold-row'
@@ -16,7 +17,6 @@ import { displayModelName } from '@/lib/model-status-label'
 import { useSessionSlice } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { $subagentsBySession } from '@/store/subagents'
-import { openSessionInNewWindow } from '@/store/windows'
 
 import {
   type DelegateRow,
@@ -64,8 +64,10 @@ function statusGlyph(status: DelegateRowStatus, label: string): ReactNode {
  * activity, so a fan-out of five children costs ten lines of transcript
  * whatever they get up to.
  */
-function DelegateRowView({ row }: { row: DelegateRow }) {
-  const parentSessionId = useStore(useSessionView().$storedId)
+function DelegateRowView({ row, toolCallId }: { row: DelegateRow; toolCallId?: string }) {
+  const view = useSessionView()
+  const parentSessionId = useStore(view.$storedId)
+  const parentRuntimeId = useStore(view.$runtimeId)
   const { t } = useI18n()
   const copy = t.assistant.tool
   const { sessionId } = row
@@ -84,8 +86,25 @@ function DelegateRowView({ row }: { row: DelegateRow }) {
     !live && row.durationSeconds ? formatDurationSeconds(row.durationSeconds) : ''
   ].filter(Boolean)
 
-  // Only a child that reported its own session id has somewhere to go.
-  const open = sessionId ? () => void openSessionInNewWindow(sessionId, { watch: true, parentSessionId }) : undefined
+  // A child that reported its own session id opens directly; any other row of
+  // a stored call still has one somewhere, and its call can say which — so
+  // the card stays openable after the subagent finishes, a reload or a restart.
+  const locatable = Boolean(toolCallId && parentRuntimeId)
+
+  const open =
+    sessionId || locatable
+      ? () =>
+          void openSubagentForCall({
+            missingMessage: copy.delegateSubagentMissing,
+            parentRuntimeId,
+            parentSessionId,
+            // A parked (`dispatched`) row can't say whether its subagent still runs.
+            running: row.status === 'dispatched' ? undefined : live,
+            sessionId,
+            taskIndex: row.taskIndex,
+            toolCallId
+          })
+      : undefined
 
   // The scaffold mark goes on the goal row, NEVER on this wrapper: it fades to
   // 0.67, and opacity opens a stacking context around the ticker's transformed
@@ -93,7 +112,13 @@ function DelegateRowView({ row }: { row: DelegateRow }) {
   // and the whole card read as stacked ghosts (#105579). styles.css's own
   // invariant: the mark is per surface and never on a container.
   return (
-    <div className="grid min-w-0 max-w-full gap-0.5 rounded-xl border border-(--ui-stroke-tertiary) px-3 py-2">
+    <div
+      className="grid min-w-0 max-w-full gap-0.5 rounded-xl border border-(--ui-stroke-tertiary) px-3 py-2"
+      data-parent-session-id={parentSessionId ?? undefined}
+      data-session-id={sessionId}
+      data-subagent-id={row.subagentId}
+      data-subagent-status={row.status}
+    >
       <div className="flex min-w-0 max-w-full items-center gap-1.5" data-conversation-scaffold="">
         <span className={SCAFFOLD_GLYPH_CLASS}>{statusGlyph(row.status, statusLabel)}</span>
         <button
@@ -159,7 +184,7 @@ export const DelegateTool: FC<Pick<ToolPart, 'args' | 'result' | 'toolCallId'>> 
   return (
     <div className="grid min-w-0 gap-(--tool-row-gap)" data-delegate-card="" data-slot="tool-block">
       {rows.map(row => (
-        <DelegateRowView key={row.id} row={row} />
+        <DelegateRowView key={row.id} row={row} toolCallId={toolCallId} />
       ))}
     </div>
   )

@@ -360,6 +360,8 @@ export const zhHantAssistant = {
       statusDone: '完成',
       resultUnavailable: '結果無法使用',
       resultInterrupted: '已中斷',
+      delegateSubagentMissing: '找不到此子代理的已儲存工作階段',
+      delegateReadOnly: "子代理 · 唯讀對話記錄",
       memoryWriteNoted: '已記下記憶寫入',
       actions: {
         read: '已讀取',

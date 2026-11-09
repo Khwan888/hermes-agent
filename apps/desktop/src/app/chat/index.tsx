@@ -9,7 +9,6 @@ import type { SubmitTextOptions } from '@/app/session/hooks/use-prompt-actions/u
 import { sessionShouldHaveTranscript } from '@/app/session/hooks/use-session-actions/utils'
 import { Thread } from '@/components/assistant-ui/thread'
 import { TranscriptWindowProvider } from '@/components/assistant-ui/thread/transcript-window'
-import { Backdrop } from '@/components/Backdrop'
 import { COMPOSER_HEART_CONFIG, HeartField } from '@/components/chat/vibe-hearts'
 import { useSetupChatView } from '@/components/onboarding/first-run/assembly'
 import { $introHoldsThread } from '@/components/onboarding/first-run/intro'
@@ -81,6 +80,7 @@ import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
 import { useSessionView } from './session-view'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
+import { SubagentBackdrop } from './subagent-backdrop'
 import { routedSessionIsLoading, threadLoadingState } from './thread-loading'
 import {
   backfillOlderTranscriptPage,
@@ -89,6 +89,7 @@ import {
 } from './transcript-backfill'
 import { advanceSessionTranscriptWindow, type SessionWindowMemo } from './transcript-window'
 import { useChatBarState } from './use-chat-bar-state'
+import { transcriptRuntimeActions, useSubagentPage } from './use-subagent-page'
 import { useTranscriptRetention } from './use-transcript-retention'
 
 interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
@@ -259,6 +260,7 @@ export function ChatRuntimeBoundary({
   const view = useSessionView()
   const runtimeId = useStore(view.$runtimeId)
   const storedId = useStore(view.$storedId)
+  const subagentPage = useSubagentPage(storedId)
   const connection = useStore($connection)
   const activeProfile = useStore($activeGatewayProfile)
   const connectionId = connection?.connectionId || (connection?.mode === 'local' ? 'local' : '')
@@ -440,8 +442,7 @@ export function ChatRuntimeBoundary({
   const runtime = useIncrementalExternalStoreRuntime<ThreadMessage>({
     messageRepository: runtimeMessageRepository,
     isRunning: !isHistorical && busy,
-    isDisabled: isHistorical,
-    setMessages: isHistorical ? undefined : onThreadMessagesChange,
+    ...transcriptRuntimeActions({ readOnly: subagentPage, historical: isHistorical, onThreadMessagesChange, onEdit, onCancel, onReload }),
     onNew: async () => {
       // Submission is handled explicitly by ChatBar.
       // Keeping this no-op avoids duplicate prompt.submit calls.
@@ -455,9 +456,7 @@ export function ChatRuntimeBoundary({
     // already resolves its target against the live session store
     // (use-prompt-actions), never the display page, so the edit is correct;
     // sending one rewinds the live transcript and drops the page.
-    onEdit,
-    onCancel: isHistorical ? undefined : async () => onCancel(),
-    onReload: isHistorical ? undefined : onReload
+
   })
 
   return (
@@ -760,7 +759,7 @@ const ChatViewContent = memo(function ChatViewContent({
       data-session-anchor={sessionAnchor}
       data-setup-chat={setupChat ? '' : undefined}
     >
-      <Backdrop />
+      <SubagentBackdrop />
       {/* Tiles get their chrome from the layout zone (chip strip); the modal
           prompt overlays stay active-session-scoped in the primary surface. */}
       {isPrimary && (

@@ -5255,6 +5255,8 @@ export const deOverrides = {
       statusDone: 'Fertig',
       resultUnavailable: 'Ergebnis nicht verfügbar',
       resultInterrupted: 'Unterbrochen',
+      delegateSubagentMissing: 'Die gespeicherte Sitzung dieses Subagenten wurde nicht gefunden',
+      delegateReadOnly: "Subagent · Schreibgeschütztes Transkript",
       memoryWriteNoted: 'Speicher-Schreiben notiert',
       actions: {
         read: 'Lesen',

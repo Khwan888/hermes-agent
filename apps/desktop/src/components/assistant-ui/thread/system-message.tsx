@@ -13,6 +13,8 @@ import { useI18n } from '@/i18n'
 import { LinkifiedText } from '@/lib/external-link'
 import { cn } from '@/lib/utils'
 
+import { AsyncSubagents } from './async-subagents'
+
 const SLASH_STATUS_RE = /^slash:(?<command>\/[^\n]+)\n(?<output>[\s\S]*)$/
 const STEER_NOTE_RE = /^steer:(?<text>[\s\S]+)$/
 const REVIEW_NOTE_RE = /^review:(?<label>[^:\n]+):?\s*(?<detail>[\s\S]*)$/
@@ -24,9 +26,10 @@ interface BackgroundResultProps {
   text: string
   report: string
   process?: boolean
+  delegationId?: string
 }
 
-export const BackgroundResult: FC<BackgroundResultProps> = ({ text, report, process }) => {
+export const BackgroundResult: FC<BackgroundResultProps> = ({ text, report, process, delegationId }) => {
   const [open, setOpen] = useState(false)
 
   return (
@@ -36,7 +39,7 @@ export const BackgroundResult: FC<BackgroundResultProps> = ({ text, report, proc
     >
       <div data-conversation-scaffold="">
         <ScaffoldRow
-          onToggle={report ? () => setOpen(!open) : undefined}
+          onToggle={report || delegationId ? () => setOpen(!open) : undefined}
           open={open}
           trailing={
             <>
@@ -58,6 +61,7 @@ export const BackgroundResult: FC<BackgroundResultProps> = ({ text, report, proc
           <LogView className="mt-2 max-h-80 overscroll-x-contain overscroll-y-auto">{report}</LogView>
         ) : (
           <div className="mt-2 max-h-80 min-w-0 max-w-full overflow-auto overscroll-x-contain overscroll-y-auto wrap-anywhere">
+            {delegationId && <AsyncSubagents delegationId={delegationId} />}
             <MarkdownTextContent isRunning={false} text={report} />
           </div>
         ))}
@@ -86,38 +90,43 @@ const ContentRefusedNote: FC<{ notice: string; userText: string }> = ({ notice, 
   </MessagePrimitive.Root>
 )
 
+function backgroundResultMetadata(report: unknown, delegationId: unknown) {
+  return {
+    report: typeof report === 'string' ? report : '',
+    delegationId: typeof delegationId === 'string' ? delegationId : undefined
+  }
+}
+
 export const SystemMessage: FC = () => {
   const { t } = useI18n()
   const text = useAuiState(s => messageContentText(s.message.content))
   const asyncResult = useAuiState(s => s.message.metadata.custom?.asyncResult)
+  const delegationId = useAuiState(s => s.message.metadata.custom?.asyncDelegationId)
   const processResult = useAuiState(s => s.message.metadata.custom?.asyncResultKind === 'process')
+  const background = backgroundResultMetadata(asyncResult, delegationId)
 
-  const contentRefused = useAuiState(
-    s => s.message.metadata.custom?.contentRefused as undefined | { notice?: string }
-  )
+  const contentRefused = useAuiState(s => s.message.metadata.custom?.contentRefused as undefined | { notice?: string })
 
   // A safety-refused turn, kept for display only: the user's own message, greyed
   // and non-interactive, with a short notice. Not a user bubble, not a reply.
   if (contentRefused) {
-    return <ContentRefusedNote notice={contentRefused.notice ?? t.assistant.thread.contentRefusedNotice} userText={text} />
+    return (
+      <ContentRefusedNote notice={contentRefused.notice ?? t.assistant.thread.contentRefusedNotice} userText={text} />
+    )
   }
 
   if (!text) {
     return null
   }
 
-  if (processResult || (typeof asyncResult === 'string' && asyncResult)) {
+  if (processResult || background.delegationId || background.report) {
     return (
       <MessagePrimitive.Root
         className="w-full min-w-0 self-start"
         data-role="system"
         data-slot="aui_system-message-root"
       >
-        <BackgroundResult
-          process={processResult}
-          report={typeof asyncResult === 'string' ? asyncResult : ''}
-          text={text}
-        />
+        <BackgroundResult {...background} process={processResult} text={text} />
       </MessagePrimitive.Root>
     )
   }

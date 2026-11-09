@@ -433,6 +433,10 @@ function contentRefusedMeta(
   return message.contentRefused ? { contentRefused: message.contentRefused } : {}
 }
 
+function asyncDelegationMetadata(message: ChatMessage) {
+  return message.asyncDelegationId ? { asyncDelegationId: message.asyncDelegationId } : {}
+}
+
 export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
   const role =
     message.role === 'user' || message.role === 'assistant' || message.role === 'system' ? message.role : 'assistant'
@@ -475,6 +479,7 @@ export function toRuntimeMessage(message: ChatMessage): ThreadMessage {
           ...timelineMeta,
           ...(message.asyncResult ? { asyncResult: message.asyncResult } : {}),
           ...(message.asyncResultKind ? { asyncResultKind: message.asyncResultKind } : {}),
+          ...asyncDelegationMetadata(message),
           ...contentRefusedMeta(message)
         }
       }

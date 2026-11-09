@@ -4650,6 +4650,8 @@ export const en: Translations = {
       statusDone: 'Done',
       resultUnavailable: 'Result unavailable',
       resultInterrupted: 'Interrupted',
+      delegateSubagentMissing: 'This subagent\'s stored session wasn\'t found',
+      delegateReadOnly: "Subagent · Read-only transcript",
       memoryWriteNoted: 'Memory write noted',
       actions: {
         read: 'Read',

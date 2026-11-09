@@ -403,6 +403,8 @@
     "assistant.tool.copyQuery",
     "assistant.tool.copyResults",
     "assistant.tool.copyUrl",
+    "assistant.tool.delegateReadOnly",
+    "assistant.tool.delegateSubagentMissing",
     "assistant.tool.failedCalls",
     "assistant.tool.failedMany",
     "assistant.tool.failedOne",

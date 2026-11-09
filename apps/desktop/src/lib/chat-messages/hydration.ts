@@ -310,6 +310,24 @@ function messageReactions(metadata: SessionMessage['display_metadata']): Message
   )
 }
 
+function asyncDelegationId(message: SessionMessage): string | undefined {
+  const id = parseDisplayMetadata(message.display_metadata)?.delegation_id
+
+  if (typeof id === 'string' && id) {
+    return id
+  }
+
+  // Older local producers persisted the envelope but no delegation_id metadata.
+  // Called only for typed completion rows, never for a user quoting the marker.
+  return typeof message.content === 'string'
+    ? message.content.match(/^\[ASYNC DELEGATION (?:BATCH )?COMPLETE — ([^\]\n]+)\]/)?.[1]
+    : undefined
+}
+
+function asyncDelegationMetadata(message: SessionMessage) {
+  return message.display_kind === 'async_delegation_complete' ? { asyncDelegationId: asyncDelegationId(message) } : {}
+}
+
 // Only parse producer-owned boundaries, never render the model's task preamble.
 // Older backends can persist an unwrapped result rather than an envelope.
 function asyncResultBody(content: string): string | undefined {
@@ -704,6 +722,7 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
         ? { asyncResult: asyncResultBody(displayContentForMessage(message.role, message.content || content)) }
         : {}),
       ...(message.display_kind === 'process_complete' ? { asyncResultKind: 'process' as const } : {}),
+      ...asyncDelegationMetadata(message),
       timestamp: earliestTimestamp(message.timestamp, ...parts.map(part => part.timestamp)),
       ...(rowId !== undefined ? { rowId } : {}),
       ...(pendingAbsorbedRows > 0 ? { serverRowSpan: pendingAbsorbedRows + 1 } : {}),
