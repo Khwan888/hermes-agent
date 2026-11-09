@@ -262,6 +262,108 @@ def test_a_multimodal_first_message_links_by_its_text_part(tmp_path):
         db.close()
 
 
+def test_a_call_that_spawned_nothing_never_takes_a_later_calls_child(tmp_path):
+    """A call its tool rejected outright (only ``tool_error``'s envelope) and a task its backend refused
+    started no child: a later call's same-goal child opens from the later call's card, never theirs."""
+    import json
+    from tools.delegate_tool_sessions import delegate_call_children
+    from tools.registry import tool_error
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "rejected", ["lint"], 1000.0, result=json.loads(tool_error("No child started")))
+        _call(db, "parent", "ran", ["lint"], 2000.0)
+        _child(db, "later-child", "parent", "lint", 2000.2)
+        refused = {"task_index": 0, "status": "error", "error": "no route", "route": {"refused": True}}
+        _call(db, "parent", "half-refused", ["fmt", "docs"], 3000.0,
+              result={"status": "dispatched", "goals": ["fmt", "docs"], "refused": [refused]})
+        _child(db, "docs-child", "parent", "docs", 3000.2)
+        _call(db, "parent", "sync-refused", ["fmt"], 4000.0, result={"results": [refused]})
+        _call(db, "parent", "fmt-later", ["fmt"], 5000.0)
+        _child(db, "fmt-child", "parent", "fmt", 5000.2)
+        assert delegate_call_children(db, ["parent"], "rejected") == [None]
+        assert delegate_call_children(db, ["parent"], "ran") == ["later-child"]
+        assert delegate_call_children(db, ["parent"], "half-refused") == [None, "docs-child"]
+        assert delegate_call_children(db, ["parent"], "sync-refused") == [None]
+        assert delegate_call_children(db, ["parent"], "fmt-later") == ["fmt-child"]
+    finally:
+        db.close()
+
+
+def test_a_call_with_no_result_yet_links_only_children_started_before_the_next_call(tmp_path):
+    """A call whose result is not stored (still running, or interrupted) may have started children, so it
+    still links its own; a child started after a later same-goal call belongs to that call."""
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        db.append_message("parent", role="assistant", content="", timestamp=1000.0, tool_calls=[{
+            "id": "no-result", "type": "function",
+            "function": {"name": "delegate_task", "arguments": '{"goal": "lint"}'}}])
+        _call(db, "parent", "next", ["lint"], 2000.0)
+        _child(db, "next-child", "parent", "lint", 2000.2)
+        db.append_message("parent", role="assistant", content="", timestamp=3000.0, tool_calls=[{
+            "id": "in-flight", "type": "function",
+            "function": {"name": "delegate_task", "arguments": '{"goal": "fmt"}'}}])
+        _child(db, "in-flight-child", "parent", "fmt", 3000.1)
+        assert delegate_call_children(db, ["parent"], "no-result") == [None]
+        assert delegate_call_children(db, ["parent"], "next") == ["next-child"]
+        assert delegate_call_children(db, ["parent"], "in-flight") == ["in-flight-child"]
+    finally:
+        db.close()
+
+
+def test_more_exact_candidates_than_open_tasks_in_a_calls_window_link_nothing(tmp_path):
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "one-task", ["docs"], 1000.0)
+        _child(db, "docs-a", "parent", "docs", 1000.1)
+        _child(db, "docs-b", "parent", "docs", 1000.2)
+        _call(db, "parent", "two-tasks", ["lint", "lint"], 2000.0)
+        for n in range(3):
+            _child(db, f"lint-{n}", "parent", "lint", 2000.1 + n / 10)
+        assert delegate_call_children(db, ["parent"], "one-task") == [None]
+        assert delegate_call_children(db, ["parent"], "two-tasks") == [None, None]
+    finally:
+        db.close()
+
+
+def test_an_earlier_legacy_call_never_takes_the_unnamed_child_of_a_later_call_that_names_its_others(tmp_path):
+    """Mixed records: the later call names one child by ``subagent_ids`` and its other task's child only by
+    goal; the earlier legacy call with that goal ran nothing in its own window and links nothing."""
+    from tools.delegate_tool_sessions import delegate_call_children
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "legacy", ["Review auth"], 1000.0)
+        _call(db, "parent", "mixed", ["Review auth", "Review auth"], 2000.0,
+              result={"status": "dispatched", "subagent_ids": ["sa-1-bbbb"]})
+        _child(db, "named", "parent", "Review auth", 2000.1, _subagent_id="sa-1-bbbb")
+        _child(db, "unnamed", "parent", "Review auth", 2000.2)
+        assert delegate_call_children(db, ["parent"], "legacy") == [None]
+        assert delegate_call_children(db, ["parent"], "mixed") == ["unnamed", "named"]
+    finally:
+        db.close()
+
+
+def test_a_failed_or_timed_out_child_that_ran_stays_openable(tmp_path):
+    """A child that ran and failed is not a refusal: its exact id links, and a legacy timed-out entry that
+    names nobody still links by goal, even after an earlier rejected call with the same goal."""
+    import json
+    from tools.delegate_tool_sessions import delegate_call_children
+    from tools.registry import tool_error
+    db = _legacy_db(tmp_path)
+    try:
+        _call(db, "parent", "rejected", ["lint", "fmt"], 1000.0, result=json.loads(tool_error("bad toolset")))
+        _child(db, "failed", "parent", "fmt", 2000.1)
+        _child(db, "timed-out", "parent", "lint", 2000.2)
+        _call(db, "parent", "settled", ["fmt", "lint"], 2000.0, result={"results": [
+            {"task_index": 0, "status": "error", "error": "boom", "child_session_id": "failed"},
+            {"task_index": 1, "status": "timeout", "error": "Subagent timed out", "api_calls": 3}]})
+        assert delegate_call_children(db, ["parent"], "rejected") == [None, None]
+        assert delegate_call_children(db, ["parent"], "settled") == ["failed", "timed-out"]
+    finally:
+        db.close()
+
+
 def test_every_result_names_each_child_session_by_task_so_its_card_reopens_it():
     """A background call's dispatch handle lists each task's own stored session by task index (a refused
     task is None), and every settled or fabricated entry names its child; a child that never got a session
