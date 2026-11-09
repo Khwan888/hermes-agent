@@ -14,6 +14,7 @@ subagents spawned before ``_subagent_id`` existed (most of a long-lived store).
 from __future__ import annotations
 
 import json
+from bisect import bisect_right
 from typing import Any, Iterable, Optional
 
 SUBAGENT_ID_KEY = "_subagent_id"
@@ -114,14 +115,15 @@ def delegate_call_children(db: Any, conversation_ids: Iterable[str],
     names that same parent, so a branch, reset or another conversation's subagent is never linked.
 
     Exact ids first: the call's stored result names its children (``child_session_ids``, a settled
-    entry's ``child_session_id``, or ``subagent_ids`` matched to the ``_subagent_id`` marker). Children of
-    calls whose result names nobody (every result written before those keys existed, or a result too big
-    to keep inline) are linked by what the row itself proves: it started after the call, and its first
-    user message is that task's goal (see ``_goal_matches``). Calls claim in the order they were made, so a
-    goal repeated by a later call never takes an earlier call's child; a task with no such row stays None.
-    Every exact goal match of every call is allocated before any wrapped-goal match, so ``Review auth``
-    never takes the child of ``Review auth tests`` whichever started first, and a legacy record that could
-    name more than one child stays None rather than open the wrong transcript."""
+    entry's ``child_session_id``, or ``subagent_ids`` matched to the ``_subagent_id`` marker). A failed or
+    timed-out child that ran is named like any other. Children of calls whose result names nobody (every
+    result written before those keys existed, a result too big to keep inline, or a call with no result
+    yet) are linked by what the row itself proves: its first user message is that task's goal (see
+    ``_goal_matches``), and it started inside its call's window (see ``_claim_goal_children``). A call its
+    tool rejected outright, and a task its backend refused, spawned nothing and never claim a row. Every
+    exact goal match is allocated before any wrapped-goal match, so ``Review auth`` never takes the child of
+    ``Review auth tests`` whichever started first, and a legacy record that could name more than one child
+    stays None rather than open the wrong transcript."""
     lineage = frozenset(sid for sid in conversation_ids if sid)
     if not tool_call_id or not lineage:
         return None
@@ -141,15 +143,15 @@ def delegate_call_children(db: Any, conversation_ids: Iterable[str],
         links[call["id"]] = exact
     texts = {row["id"]: _first_user_text(db, row.get("first_user")) for row in roots}
     for kind in ("exact", "wrapped"):  # every exact match, every call, before any wrapped one
-        for call in calls:
-            _claim_goal_children(call, links[call["id"]], roots, texts, claimed, kind)
+        _claim_goal_children(calls, links, roots, texts, claimed, kind)
     found = links[tool_call_id]
     return [_newest_segment(db, sid) if sid else None for sid in found]
 
 
 def _delegate_calls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """``{id, ts, goals, result}`` per spawning ``delegate_task`` call, in the order it was made (the
-    first stored copy of a call wins: compaction can write it again)."""
+    """``{id, ts, goals, result, closed}`` per spawning ``delegate_task`` call, in the order it was made (the
+    first stored copy of a call wins: compaction can write it again). ``closed`` holds the task indexes that
+    provably started no child (see ``_no_child_tasks``)."""
     calls: dict[str, dict[str, Any]] = {}
     results: dict[str, Any] = {}
     for row in rows:
@@ -169,7 +171,25 @@ def _delegate_calls(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             calls.setdefault(call["id"], {"id": call["id"], "ts": row.get("timestamp") or 0.0, "goals": goals})
     for call in calls.values():
         call["result"] = _json(results.get(call["id"]), dict)
+        call["closed"] = _no_child_tasks(call["result"], len(call["goals"]))
     return sorted(calls.values(), key=lambda call: call["ts"])
+
+
+# Keys only a call that got as far as dispatching writes; a bare ``tool_error`` envelope has none of them.
+_DISPATCH_KEYS = ("status", "results", "child_session_ids", "subagent_ids", "delegation_id", "refused")
+
+
+def _no_child_tasks(result: dict[str, Any], count: int) -> frozenset[int]:
+    """The task indexes of a call that provably started no child: every task when the tool rejected the call
+    before building any child (its result is only ``tool_error``'s ``{"error": ...}``), else the tasks its
+    backend refused (listed under ``refused``, or an entry whose ``route`` says ``refused``). A missing or
+    unreadable result proves nothing, and a failed or timed-out child did run: neither closes a task."""
+    if result.get("error") and not any(key in result for key in _DISPATCH_KEYS):
+        return frozenset(range(count))
+    refused = [e for e in result.get("refused") or [] if isinstance(e, dict)]
+    refused += [e for e in result.get("results") or []
+                if isinstance(e, dict) and isinstance(e.get("route"), dict) and e["route"].get("refused") is True]
+    return frozenset(e["task_index"] for e in refused if isinstance(e.get("task_index"), int))
 
 
 def _exact_child(call: dict[str, Any], index: int, by_id: dict[str, Any], by_marker: dict[str, str]) -> Optional[str]:
@@ -202,36 +222,50 @@ def _goal_matches(text: str, goal: str, kind: str) -> bool:
     return rest[:1] == "\n" and rest.lstrip().startswith(_GOAL_WRAPPERS)
 
 
-def _claim_goal_children(call: dict[str, Any], found: list[Optional[str]], roots: list[dict[str, Any]],
-                         texts: dict[str, str], claimed: set[str], kind: str) -> None:
-    """Link *call*'s unlinked tasks to unclaimed children that started after it and whose first user message
-    matches the goal by *kind*.
+def _claim_goal_children(calls: list[dict[str, Any]], links: dict[str, list[Optional[str]]],
+                         roots: list[dict[str, Any]], texts: dict[str, str], claimed: set[str], kind: str) -> None:
+    """Link the open tasks of *calls* (unlinked, not closed) to unclaimed children whose first user message
+    matches the task's goal by *kind*, using only what proves which call ran a child.
 
-    Tasks repeating one goal share its candidates. Exact matches go out by ``started_at`` (tasks start in task
-    order, and the rows are identical apart from that) only when every task of the goal gets one and no two
-    taken rows started at the same instant. A wrapped match must be the goal's only candidate for a single
-    task. Anything else is ambiguous and stays None; its candidates are not handed to any later goal."""
-    pending: dict[str, list[int]] = {}
-    for i, goal in enumerate(call["goals"]):
-        if found[i] is None and goal.strip():
-            pending.setdefault(goal.strip(), []).append(i)
-    for goal, tasks in pending.items():
-        rows = [row for row in roots if row["id"] not in claimed
-                and (row.get("started_at") or 0) >= call["ts"] - _CALL_CLOCK_SLACK
-                and _goal_matches(texts[row["id"]], goal, kind)]
-        if kind == "exact":
-            taken = rows[:len(tasks)]
-            starts = {row.get("started_at") for row in taken}
-            if len(taken) < len(tasks) or len(starts) < len(taken):
-                taken = []
-        else:
-            taken = rows if len(tasks) == 1 and len(rows) == 1 else []
-        if not taken:
-            claimed.update(row["id"] for row in rows)  # ambiguous: never lent to a later call
+    A child's row is written while its call runs, before the parent's next turn, so a row belongs to the
+    calls made at the latest call instant at or before its start (``_CALL_CLOCK_SLACK`` allowed): never to an
+    earlier call, never to a later one. Calls of one instant are one assistant message. Within that window the
+    open tasks of one goal and the matching rows must pair up exactly: exact matches go out by ``started_at``
+    (tasks start in task order, and the rows are identical apart from that) only when one call holds every
+    such task, the rows number the tasks, and no two started at the same instant; a wrapped match must be
+    the only row for a single task. Anything else is ambiguous and stays None; its rows are not handed to any
+    other task."""
+    instants = sorted({call["ts"] for call in calls})
+    windows: dict[tuple[float, str], list[dict[str, Any]]] = {}
+    for row in roots:
+        start = row.get("started_at")
+        if row["id"] in claimed or not isinstance(start, (int, float)):
             continue
-        for i, row in zip(tasks, taken):
-            claimed.add(row["id"])
-            found[i] = row["id"]
+        at = bisect_right(instants, start + _CALL_CLOCK_SLACK) - 1
+        if at < 0:
+            continue
+        goals = {goal.strip() for call in calls if call["ts"] == instants[at]
+                 for i, goal in enumerate(call["goals"]) if _open(call, links, i)}
+        for goal in goals:
+            if _goal_matches(texts[row["id"]], goal, kind):
+                windows.setdefault((instants[at], goal), []).append(row)
+    for (ts, goal), rows in windows.items():
+        slots = [(call, i) for call in calls if call["ts"] == ts
+                 for i, g in enumerate(call["goals"]) if _open(call, links, i) and g.strip() == goal]
+        one_call = len({call["id"] for call, _ in slots}) == 1
+        if kind == "exact":
+            starts = {row.get("started_at") for row in rows}
+            taken = rows if one_call and len(rows) == len(slots) == len(starts) else []
+        else:
+            taken = rows if len(slots) == 1 and len(rows) == 1 else []
+        claimed.update(row["id"] for row in rows)  # a row of an ambiguous window is never lent to another task
+        for (call, i), row in zip(slots, taken):
+            links[call["id"]][i] = row["id"]
+
+
+def _open(call: dict[str, Any], links: dict[str, list[Optional[str]]], index: int) -> bool:
+    """Task *index* of *call* is still unlinked, has a goal, and may have started a child."""
+    return links[call["id"]][index] is None and index not in call["closed"] and bool(call["goals"][index].strip())
 
 
 def _first_user_text(db: Any, content: Any) -> str:
