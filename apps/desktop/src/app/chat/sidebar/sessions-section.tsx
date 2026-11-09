@@ -10,7 +10,7 @@ import { SidebarGroup, SidebarGroupContent } from '@/components/ui/sidebar'
 import type { HermesGitWorktree } from '@/global'
 import type { SessionInfo } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { flattenSessionsWithBranches } from '@/lib/session-branch-tree'
+import { flattenSessionsWithBranches, sessionTreeKey } from '@/lib/session-branch-tree'
 import {
   groupEntriesByRecency,
   groupEntriesByStatus,
@@ -45,7 +45,7 @@ import {
 import { WorkspaceAddButton } from './projects/workspace-header'
 import { ReorderableList, useSortableBindings } from './reorderable-list'
 import { SidebarSessionSkeletons } from './section-states'
-import { SidebarSessionRow } from './session-row'
+import { type SessionTreeActions, SidebarSessionTreeRow as SidebarSessionRow } from './session-tree-row'
 import { VirtualSessionList } from './virtual-session-list'
 
 export const VIRTUALIZE_THRESHOLD = 25
@@ -192,11 +192,68 @@ interface SidebarSessionsSectionProps {
   // set it too: their order is the backend's ranking (exact id matches
   // first), which recency re-sorting would bury under newer quoting rows.
   preserveOrder?: boolean
+  includeSubagents?: boolean
   // Inbox style: render every flat session row as a three-line card (project ·
   // age / title / model · size). A render variant that composes with whichever
   // grouping is active — the flat recents list opts in; dense tree surfaces
   // (pinned, projects, messaging) keep the one-line row.
   card?: boolean
+}
+
+interface ProjectOverviewListProps {
+  projects: SidebarProjectTree[]
+  renderProject: (project: SidebarProjectTree, component: typeof ProjectOverviewRow) => React.ReactNode
+  onReorder?: SidebarSessionsSectionProps['onReorderProjects']
+  sensors?: SidebarSessionsSectionProps['dndSensors']
+}
+
+function ProjectOverviewList({ projects, renderProject, onReorder, sensors }: ProjectOverviewListProps) {
+  const home = projects[0]?.isNoProject ? projects[0] : undefined
+  const sortableProjects = home ? projects.slice(1) : projects
+  const draggable = sortableProjects.length > 1 && !!onReorder
+  const Row = draggable ? SortableProjectOverviewRow : ProjectOverviewRow
+  const rows = sortableProjects.map(project => renderProject(project, Row))
+
+  return (
+    <>
+      {home && renderProject(home, ProjectOverviewRow)}
+      {draggable && onReorder ? (
+        <ReorderableList ids={sortableProjects.map(project => project.id)} onReorder={onReorder} sensors={sensors}>
+          {rows}
+        </ReorderableList>
+      ) : (
+        rows
+      )}
+    </>
+  )
+}
+
+interface DateDividerActionProps {
+  grouping: SidebarSessionsSectionProps['grouping']
+  label: string
+  onNewSessionInWorkspace: SidebarSessionsSectionProps['onNewSessionInWorkspace']
+  onNewSessionSplit: SidebarSessionsSectionProps['onNewSessionSplit']
+}
+
+function dateDividerAction({ grouping, label, onNewSessionInWorkspace, onNewSessionSplit }: DateDividerActionProps) {
+  return grouping === 'date' && onNewSessionInWorkspace ? (
+    <WorkspaceAddButton
+      label={label}
+      onClick={() => onNewSessionInWorkspace(null)}
+      onPointerDown={
+        onNewSessionSplit
+          ? event => {
+              startNewSessionDrag(placement => {
+                onNewSessionSplit(placement.dir, {
+                  anchor: placement.anchor,
+                  before: placement.before
+                })
+              }, event)
+            }
+          : undefined
+      }
+    />
+  ) : null
 }
 
 export function SidebarSessionsSection({
@@ -244,6 +301,7 @@ export function SidebarSessionsSection({
   showProfileTags = false,
   grouping = 'none',
   preserveOrder = pinned,
+  includeSubagents = false,
   card = false
 }: SidebarSessionsSectionProps) {
   const { t } = useI18n()
@@ -276,13 +334,27 @@ export function SidebarSessionsSection({
   // recency sort — the drag order is layered on per date group below, so the
   // buckets stay truthful and a reorder never costs the list its dividers.
   const displayEntries = useMemo(
-    () => flattenSessionsWithBranches(sessions, { preserveOrder }),
-    [sessions, preserveOrder]
+    () => flattenSessionsWithBranches(sessions, { preserveOrder, includeSubagents }),
+    [sessions, preserveOrder, includeSubagents]
+  )
+
+  const subagentActions = useMemo<SessionTreeActions>(
+    () => ({
+      activeSessionId,
+      onArchiveSession,
+      onBranchSession,
+      onDeleteSession,
+      onResumeSession,
+      onTogglePin,
+      onToggleUnread
+    }),
+    [activeSessionId, onArchiveSession, onBranchSession, onDeleteSession, onResumeSession, onTogglePin, onToggleUnread]
   )
 
   const renderRow = useCallback(
     (session: SessionInfo, draggable: boolean, branchStem?: string) => {
       const rowProps = {
+        actions: subagentActions,
         branchStem,
         card,
         isPinned: pinned,
@@ -303,13 +375,14 @@ export function SidebarSessionsSection({
       // are distinct rows (#92454) — a bare-id key makes React misattribute
       // one twin's rendered state to the other.
       return draggable && !branchStem ? (
-        <SortableSidebarSessionRow key={`${session.profile ?? ''}::${session.id}`} {...rowProps} />
+        <SortableSidebarSessionRow key={sessionTreeKey(session)} {...rowProps} />
       ) : (
-        <SidebarSessionRow key={`${session.profile ?? ''}::${session.id}`} {...rowProps} />
+        <SidebarSessionRow key={sessionTreeKey(session)} {...rowProps} />
       )
     },
     [
       activeSessionId,
+      subagentActions,
       card,
       onArchiveSession,
       onBranchSession,
@@ -329,25 +402,12 @@ export function SidebarSessionsSection({
   // exactly there; a sub-threshold release stays the ordinary click. The ONE
   // element here feeds both the plain and the virtualized list paths, so this
   // single wiring covers every date-divider "+" on screen.
-  const dividerAction =
-    grouping === 'date' && onNewSessionInWorkspace ? (
-      <WorkspaceAddButton
-        label={t.sidebar.nav['new-session']}
-        onClick={() => onNewSessionInWorkspace(null)}
-        onPointerDown={
-          onNewSessionSplit
-            ? event => {
-                startNewSessionDrag(placement => {
-                  onNewSessionSplit(placement.dir, {
-                    anchor: placement.anchor,
-                    before: placement.before
-                  })
-                }, event)
-              }
-            : undefined
-        }
-      />
-    ) : null
+  const dividerAction = dateDividerAction({
+    grouping,
+    label: t.sidebar.nav['new-session'],
+    onNewSessionInWorkspace,
+    onNewSessionSplit
+  })
 
   const dividerToggle = useMemo(
     () => ({
@@ -522,11 +582,6 @@ export function SidebarSessionsSection({
     // explicit-before-auto, with a manual drag-order winning when present).
     // Render in that order and make rows drag-to-reorder when a handler is
     // wired — Home stays outside the sortable list, it's a fixture.
-    const home = projectOverview[0]?.isNoProject ? projectOverview[0] : undefined
-    const sortableProjects = home ? projectOverview.slice(1) : projectOverview
-    const projectsDraggable = sortableProjects.length > 1 && !!onReorderProjects
-    const Row = projectsDraggable ? SortableProjectOverviewRow : ProjectOverviewRow
-
     const projectRow = (project: SidebarProjectTree, Component: typeof ProjectOverviewRow) => (
       <Component
         activeProjectId={activeProjectId}
@@ -546,23 +601,13 @@ export function SidebarSessionsSection({
       />
     )
 
-    const rows = sortableProjects.map(project => projectRow(project, Row))
-
     inner = (
-      <>
-        {home && projectRow(home, ProjectOverviewRow)}
-        {projectsDraggable && onReorderProjects ? (
-          <ReorderableList
-            ids={sortableProjects.map(project => project.id)}
-            onReorder={onReorderProjects}
-            sensors={dndSensors}
-          >
-            {rows}
-          </ReorderableList>
-        ) : (
-          rows
-        )}
-      </>
+      <ProjectOverviewList
+        onReorder={onReorderProjects}
+        projects={projectOverview}
+        renderProject={projectRow}
+        sensors={dndSensors}
+      />
     )
   } else if (groups?.length && groups.every(group => group.mode === 'profile' && group.profile)) {
     inner = (
@@ -659,6 +704,7 @@ const sessionDropTargetProps = (pinned: boolean) =>
   pinned ? { 'data-session-pin-drop': '' } : { 'data-session-unpin-drop': '' }
 
 interface SortableSessionRowProps {
+  actions: SessionTreeActions
   session: SessionInfo
   isPinned: boolean
   isSelected: boolean

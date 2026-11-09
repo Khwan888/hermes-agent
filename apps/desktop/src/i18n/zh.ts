@@ -3071,6 +3071,14 @@ export const zhOverrides = {
   },
 
   sidebar: {
+    subagents: {
+      count: (n: number) => `${n} 个子代理`,
+      loading: '正在加载子代理…',
+      loadMore: '显示更多子代理',
+      loadFailed: '无法加载子代理。',
+      retry: '重试',
+      empty: '没有子代理'
+    },
     filter: {
       grouping: '分组',
       ordering: '排序',

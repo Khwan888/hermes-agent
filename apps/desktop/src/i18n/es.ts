@@ -3597,6 +3597,14 @@ export const esOverrides = {
     missingBody: 'Este artefacto ya no está en el registro local.'
   },
   sidebar: {
+    subagents: {
+      count: (n: number) => (n === 1 ? '1 subagente' : `${n} subagentes`),
+      loading: 'Cargando subagentes…',
+      loadMore: 'Mostrar más subagentes',
+      loadFailed: 'No se pudieron cargar los subagentes.',
+      retry: 'Reintentar',
+      empty: 'Sin subagentes'
+    },
     filter: {
       grouping: 'Agrupación',
       ordering: 'Orden',

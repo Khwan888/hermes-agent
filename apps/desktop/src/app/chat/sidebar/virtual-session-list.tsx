@@ -7,6 +7,7 @@ import { type FC, useEffect, useRef } from 'react'
 
 import type { SessionInfo } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { sessionTreeKey } from '@/lib/session-branch-tree'
 import { type SidebarListRow } from '@/lib/session-date-groups'
 import { sessionBucketLabel } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -14,10 +15,11 @@ import { sessionPinId } from '@/store/session'
 import { $sessionListDensity } from '@/store/session-list-density'
 
 import { SidebarDateDivider } from './chrome'
-import { SidebarSessionRow } from './session-row'
 import { SESSION_CARD_ROW_ESTIMATE_PX, sessionRowEstimate } from './session-row-details'
+import { type SessionTreeActions, SidebarSessionTreeRow as SidebarSessionRow } from './session-tree-row'
 
 interface SessionRowCommonProps {
+  actions: SessionTreeActions
   branchStem?: string
   card?: boolean
   isPinned: boolean
@@ -101,7 +103,7 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
     getItemKey: index => {
       const row = listRows[index]
 
-      return row ? (row.kind === 'divider' ? row.key : row.entry.session.id) : index
+      return row ? (row.kind === 'divider' ? row.key : sessionTreeKey(row.entry.session)) : index
     },
     getScrollElement: () => scrollerRef.current,
     // jsdom-friendly default; the real rect takes over on first observe.
@@ -160,6 +162,15 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
     const reorderable = sortable && !branchStem
 
     const commonProps: SessionRowCommonProps = {
+      actions: {
+        activeSessionId,
+        onArchiveSession,
+        onBranchSession,
+        onDeleteSession,
+        onResumeSession,
+        onTogglePin,
+        onToggleUnread
+      },
       branchStem,
       card,
       isPinned: pinned,
@@ -177,7 +188,7 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
 
     // Key by (profile, id): twins with the same stored id in two profiles are
     // distinct rows (#92454) — a bare-id key misattributes rendered state.
-    const rowKey = `${session.profile ?? ''}::${session.id}`
+    const rowKey = sessionTreeKey(session)
 
     return reorderable ? (
       <div data-index={virtualItem.index} key={rowKey} ref={virtualizer.measureElement} style={itemStyle}>

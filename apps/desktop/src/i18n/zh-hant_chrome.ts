@@ -38,6 +38,14 @@ export const zhHantChrome = {
   },
 
   sidebar: {
+    subagents: {
+      count: (n: number) => `${n} 個子代理`,
+      loading: '正在載入子代理…',
+      loadMore: '顯示更多子代理',
+      loadFailed: '無法載入子代理。',
+      retry: '重試',
+      empty: '沒有子代理'
+    },
     profileRail: '設定檔列',
     markAllRead: '全部標示為已讀',
     filter: {

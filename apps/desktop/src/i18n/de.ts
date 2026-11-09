@@ -3609,6 +3609,14 @@ export const deOverrides = {
     missingBody: 'Dieses Artifact ist nicht mehr in der lokalen Registry.'
   },
   sidebar: {
+    subagents: {
+      count: (n: number) => (n === 1 ? '1 Subagent' : `${n} Subagenten`),
+      loading: 'Subagenten werden geladen…',
+      loadMore: 'Weitere Subagenten anzeigen',
+      loadFailed: 'Subagenten konnten nicht geladen werden.',
+      retry: 'Erneut versuchen',
+      empty: 'Keine Subagenten'
+    },
     filter: {
       grouping: 'Gruppierung',
       ordering: 'Sortierung',

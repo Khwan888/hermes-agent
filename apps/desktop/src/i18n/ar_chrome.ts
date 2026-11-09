@@ -147,6 +147,14 @@ export const arChrome = {
     }
   },
   sidebar: {
+    subagents: {
+      count: (n: number) => `${n} من الوكلاء الفرعيين`,
+      loading: 'جارٍ تحميل الوكلاء الفرعيين…',
+      loadMore: 'عرض المزيد من الوكلاء الفرعيين',
+      loadFailed: 'تعذّر تحميل الوكلاء الفرعيين.',
+      retry: 'إعادة المحاولة',
+      empty: 'لا يوجد وكلاء فرعيون'
+    },
     profileRail: 'شريط الملفات الشخصية',
     markAllRead: 'وضع علامة مقروء على الكل',
     filter: {
