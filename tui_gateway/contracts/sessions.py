@@ -116,6 +116,7 @@ class SeedMessage(Params):
 
 
 class SessionCreateParams(ProfileParams):
+    delegation_override: dict[str, JsonValue] | None = None
     cols: int | None = None
     source: str | None = None
     cwd: str | None = None

@@ -313,7 +313,11 @@ def resolve_task_routes(task_list: list[dict[str, Any]], config: Mapping[str, An
     A task the backend cannot route gets a route with ``error`` set; its siblings are unaffected. Identical routes
     resolve credentials once per call (the default backend resolves exactly once)."""
     from agent.delegation_backends import pinned_backend
-    if pinned := pinned_backend(parent_agent):
+    from agent.delegation_settings import current_settings
+    snapshot = current_settings() or getattr(parent_agent, "_delegation_config", None)
+    if isinstance(snapshot, dict):
+        config = snapshot
+    elif pinned := pinned_backend(parent_agent):
         config = {**config, "backend": pinned}
     try:
         provider = _active_provider(config)

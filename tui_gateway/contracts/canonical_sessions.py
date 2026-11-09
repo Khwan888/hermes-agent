@@ -28,6 +28,7 @@ class CanonicalClientIdentity(Params):
 
 
 class CanonicalCreateParams(ProfileParams):
+    delegation_override: dict[str, JsonValue] | None = None
     request_id: str | None = None
     source: Literal['cli', 'tui', 'gui', 'acp', 'tool', 'oneshot'] = 'cli'
     cwd: str | None = None

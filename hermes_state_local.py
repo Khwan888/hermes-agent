@@ -72,6 +72,10 @@ def commit_local_session(db, *, epoch, receipt):
             (sid, policy['source'], created, receipt['principal_id'], route,
              entry['origin']['chat_id'], policy['model'], _row_cwd(policy), db._own_profile_name(),
              _json(entry['origin']), started))
+        subagent_settings = json.loads(policy.get("config_json") or "{}").get("_delegation_settings")
+        if isinstance(subagent_settings, dict):
+            encoded_config = db._merge_model_config_json(conn, sid, {"_delegation_settings": subagent_settings})
+            conn.execute("UPDATE sessions SET model_config=? WHERE id=?", (encoded_config, sid))
         conn.execute("INSERT INTO gateway_routing(scope,session_key,entry_json,updated_at) VALUES('',?,?,?)",
                      (route, _json(entry), started))
         conn.execute('INSERT INTO state_meta(key,value) VALUES(?,?)', (key, encoded))

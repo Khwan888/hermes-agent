@@ -8,6 +8,7 @@ import threading
 from collections import OrderedDict
 from typing import Optional
 from tools.mcp_tool_common import _core
+from agent.delegation_settings import scoped_refresh
 
 logger = logging.getLogger("tools.mcp_tool")
 
@@ -125,6 +126,7 @@ def _publish_tool_snapshot(
         return new_names - current
 
 
+@scoped_refresh
 def refresh_agent_mcp_tools(
     agent, *, enabled_override=None, disabled_override=None, quiet_mode: bool = True,
     content_aware: bool = False, preserve_prefix: bool = False) -> set:
@@ -225,6 +227,9 @@ def persist_agent_tool_names(agent) -> None:
         pin = {"version": tool_pin_version(), "tools": _agent_tool_defs(agent)}
         if isinstance(backend := getattr(agent, "_delegation_backend", None), str) and backend:
             pin["delegation_backend"] = backend  # what its delegate_task was built from: the session routes on it
+        from agent.delegation_settings import runtime_projection
+        if isinstance(config := getattr(agent, "_delegation_config", None), dict):
+            pin["delegation_config"] = runtime_projection(config)
         db.update_session_tool_names(session_id, pin)
     except Exception:
         logger.debug("tool_names persist skipped", exc_info=True)
@@ -362,6 +367,9 @@ def restore_agent_tool_prefix(agent, saved) -> bool:
     if isinstance(saved, dict) and saved.get("delegation_backend"):
         from agent.delegation_backends import adopt_built_backend
         adopt_built_backend(agent, pinned, saved["delegation_backend"])
+        from agent.delegation_settings import runtime_projection
+        if isinstance(saved.get("delegation_config"), dict):
+            agent._delegation_config = runtime_projection(saved["delegation_config"])
     from tools.delegate_tool import adopt_session_delegation_mode
     adopt_session_delegation_mode(agent)  # the restored delegate_task decides joined vs background from here on
     if not same_code or merged != list(pinned):

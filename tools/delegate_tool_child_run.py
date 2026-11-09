@@ -478,6 +478,9 @@ def _defer_close_after_timeout(child: Any, child_future: Any) -> None:
     resources until process exit.
     """
     child_future.add_done_callback(lambda _done: _close_child(child, "Failed to close timed-out child after worker exit"))
+    # The worker still runs, so it keeps its chat's subagent slot until it settles too.
+    from agent.delegation_capacity import release_when_settled
+    release_when_settled(child, child_future)
     # Bounded drain (#94248 native half): the deferred close above only fires once the abandoned worker
     # unwinds, but that worker is typically parked inside an in-flight OpenSSL read (Codex / httpx). Never
     # hard-close that transport from this thread — releasing FDs under a live SSL read is the #29507/#70773

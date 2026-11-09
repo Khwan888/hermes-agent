@@ -79,6 +79,9 @@ def adopt_built_backend(agent: Any, defs: Any, backend: str) -> None:
     from ``backend``, or pinned with it); a kept older definition keeps the backend it was built from."""
     if _delegate_def(getattr(agent, "tools", None)) == _delegate_def(defs):
         agent._delegation_backend = backend
+        from agent.delegation_settings import current_settings, runtime_projection
+        if (config := current_settings()) is not None:
+            agent._delegation_config = runtime_projection(config)
 
 
 def pinned_backend(agent: Any) -> str:
@@ -130,15 +133,25 @@ def apply_requested_tool_rebuild(agent: Any) -> bool:
     subagents share the session's key but never take its request."""
     if getattr(agent, "_turn_origin", None) or getattr(agent, "_delegate_depth", 0):
         return False
+    from agent.delegation_settings import apply_settings_at_turn
+    settings_changed = apply_settings_at_turn(agent)
     key = _current_session_key(agent)
     with _lock:
         if key not in _rebuild_requests:
-            return False
+            return settings_changed
         _rebuild_requests.discard(key)
     from hermes_cli.observability.shared_metrics_efficiency import record_cache_break
     from tools.mcp_tool_agent import refresh_agent_mcp_tools
     before = getattr(agent, "tools", None)
-    refresh_agent_mcp_tools(agent, quiet_mode=True, content_aware=True)  # adopts the saved backend, re-pins a change
+    from agent.delegation_settings import profile_defaults, settings_scope
+    config = profile_defaults()
+    with settings_scope(config):
+        refresh_agent_mcp_tools(agent, quiet_mode=True, content_aware=True)
+    agent._delegation_config, agent._delegation_backend = config, config.get("backend", "default")
+    from agent.delegation_settings import commit_global_switch
+    from tools.mcp_tool_agent import persist_agent_tool_names
+    commit_global_switch(agent, config)
+    persist_agent_tool_names(agent)
     if agent.tools is before:
         return False
     record_cache_break(agent, "toolset_change")

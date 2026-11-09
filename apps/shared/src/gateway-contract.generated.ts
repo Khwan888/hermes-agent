@@ -1387,6 +1387,18 @@ export interface ConnectorPolicySetResult {
   revision: string
   effective: ConnectorPolicyEffectiveUnrestricted | ConnectorPolicyEffectiveDenyAll | ConnectorPolicyEffectiveAllow | ConnectorPolicyEffectiveDeny
 }
+export interface DelegationSettingsParams {
+  profile?: string | null
+  session_id?: string | null
+  override?: Record<string, unknown> | null
+}
+export interface DelegationSettingsResult {
+  override: Record<string, unknown> | null
+  effective: Record<string, unknown>
+  defaults: Record<string, unknown>
+  available_backends: string[]
+  pending_schema?: boolean
+}
 /** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. */
 export interface DisplayStatus {
   profile: string
@@ -3168,6 +3180,7 @@ export interface WakeFeedResult {
 }
 export interface SessionCreateParams {
   profile?: string | null
+  delegation_override?: Record<string, unknown> | null
   cols?: number | null
   source?: string | null
   cwd?: string | null
@@ -5108,6 +5121,7 @@ export interface CanonicalGroupsPeerRegisterParams {
 }
 export interface CanonicalCreateParams {
   profile?: string | null
+  delegation_override?: Record<string, unknown> | null
   request_id?: string | null
   source?: 'cli' | 'tui' | 'gui' | 'acp' | 'tool' | 'oneshot'
   cwd?: string | null
@@ -6353,6 +6367,8 @@ export interface RpcMethods {
   'cron.manage': { params: CronManageParams; result: CronManageResult }
   /** Block/unblock NEW spawns globally (active children keep running); returns the new state. */
   'delegation.pause': { params: DelegationPauseParams; result: DelegationPauseResult }
+  /** Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy. */
+  'delegation.settings': { params: DelegationSettingsParams; result: DelegationSettingsResult }
   /** Running subagent tree plus the spawn pause flag and limits. */
   'delegation.status': { params: ProfileParams; result: DelegationStatusResult }
   /** Upload a force-redacted debug bundle to Nous-internal diagnostics storage. */
@@ -6839,6 +6855,7 @@ export const RPC_METHODS = [
   'connectors.tools',
   'cron.manage',
   'delegation.pause',
+  'delegation.settings',
   'delegation.status',
   'diagnostics.share_nous',
   'display.install',
@@ -7086,6 +7103,8 @@ export interface CanonicalRpcMethods {
   'cron.status': { params: CronAdmissionParams; result: CronStatusResult }
   /** Admit one cron firing into the owning profile's durable FIFO. */
   'cron.submit': { params: CronRunParams; result: CronSubmitResult }
+  /** Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy. */
+  'delegation.settings': { params: DelegationSettingsParams; result: DelegationSettingsResult }
   'groups.approve': { params: CanonicalRoomApproveParams; result: GroupsApproveResult }
   /** Read one committed attachment for a live room viewer. */
   'groups.attachment.download': { params: GroupsAttachmentDownloadParams; result: RoomAttachmentBytes }
@@ -7168,6 +7187,7 @@ export const CANONICAL_RPC_METHODS = [
   'cron.recover',
   'cron.status',
   'cron.submit',
+  'delegation.settings',
   'groups.approve',
   'groups.attachment.download',
   'groups.attachment.upload',

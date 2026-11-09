@@ -289,8 +289,9 @@ def _tool_defs_cache_key(
         cfg_fp = config_version(get_config_path())
     except (FileNotFoundError, OSError, ImportError):
         cfg_fp = None
+    from agent.delegation_settings import settings_cache_key
     return (
-        registry.current_scope_key(), frozenset(enabled_toolsets) if enabled_toolsets is not None else None,
+        settings_cache_key(), registry.current_scope_key(), frozenset(enabled_toolsets) if enabled_toolsets is not None else None,
         frozenset(disabled_toolsets) if disabled_toolsets else None, registry._generation, cfg_fp,
         bool(os.environ.get("HERMES_KANBAN_TASK")), bool(skip_tool_search_assembly),
         _is_delegated_child_context(), _is_dispatcher_owned_worker(), profile_scope, check_fn_cache_epoch(),

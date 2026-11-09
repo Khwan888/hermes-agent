@@ -159,7 +159,7 @@ def test_rejected_background_child_stops_with_parent(
     if rejection == "capacity":
         accepted = async_delegation.dispatch_async_delegation(
             goal="occupy the only slot", context=None, toolsets=None, role="leaf",
-            model=child.model, session_key="other-session", runner=occupy_slot,
+            model=child.model, session_key=parent.session_id, runner=occupy_slot,
             max_async_children=1,
         )
         assert accepted["status"] == "dispatched"

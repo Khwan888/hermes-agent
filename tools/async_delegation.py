@@ -945,6 +945,7 @@ def _dispatch_admitted(
         "status": "running", "dispatched_at": dispatched_at, "completed_at": None,
         "interrupt_fn": interrupt_fn, **({"is_batch": True} if is_batch else {}), "progress_fn": progress_fn,
         "slot_key": slot_key or delegation_id,
+        "_capacity_owner": (hermes_home_key(), parent_session_id or origin_session_id or session_key),
         **({"task_transcripts": dict(task_transcripts)} if task_transcripts else {}),
         # Which of the call's ``goals`` this unit runs (None = all of them).
         **({"task_indexes": list(task_indexes)} if task_indexes is not None else {}),
@@ -956,7 +957,10 @@ def _dispatch_admitted(
     with _records_lock:
         if any((field, record[field]) in _refused_by for field in _FENCED_FIELDS):
             return {"status": "rejected", "error": "This session was closed (exit or /new): no new background work."}
-        active_slots = {r.get("slot_key") or r["delegation_id"] for r in _records.values() if r.get("status") in _ACTIVE_STATES}
+        # A chat's subagent limit is not a process/profile-wide budget. Units of one call still share
+        # one slot, but an unrelated chat (or another profile with the same id) owns a separate pool.
+        active_slots = {r.get("slot_key") or r["delegation_id"] for r in _records.values()
+                        if r.get("status") in _ACTIVE_STATES and r.get("_capacity_owner") == record["_capacity_owner"]}
         if record["slot_key"] not in active_slots and len(active_slots) >= max_async_children:
             return {"status": "rejected", "error": capacity_error}
         _records[delegation_id] = record

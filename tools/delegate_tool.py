@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 
 from tools.terminal_tool import set_approval_callback as _set_subagent_approval_cb
 from utils import is_truthy_value
+from agent.delegation_settings import scoped_spawn
+from agent.delegation_capacity import child_capacity
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +376,7 @@ def _build_child_agent(
         )
     return child
 
+@child_capacity
 def _run_single_child(
     task_index: int, goal: str, child=None, parent_agent=None, *, owner_session_id: Optional[str] = None,
     owner_transport: Any = None, owner_session_record: Any = None, **_kwargs,
@@ -563,6 +566,7 @@ def _oneshot_spawn_budget(parent_agent: Any, requested: int) -> Optional[str]:
     return None
 
 
+@scoped_spawn
 def delegate_task(
     goal: Optional[str] = None, context: Optional[str] = None, tasks: Optional[list[dict[str, Any]]] = None,
     max_iterations: Optional[int] = None, role: Optional[str] = None, background: Optional[bool] = None,

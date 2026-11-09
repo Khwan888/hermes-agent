@@ -745,6 +745,24 @@
       }
     },
     {
+      "name": "delegation.settings",
+      "summary": "Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DelegationSettingsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DelegationSettingsResult"
+        }
+      }
+    },
+    {
       "name": "delegation.status",
       "summary": "Running subagent tree plus the spawn pause flag and limits.",
       "params": [
@@ -8633,6 +8651,19 @@
             ],
             "default": null,
             "title": "Profile"
+          },
+          "delegation_override": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Delegation Override"
           },
           "request_id": {
             "anyOf": [
@@ -17068,6 +17099,97 @@
           "paused"
         ],
         "title": "DelegationPauseResult",
+        "type": "object"
+      },
+      "DelegationSettingsParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Session Id"
+          },
+          "override": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Override"
+          }
+        },
+        "title": "DelegationSettingsParams",
+        "type": "object"
+      },
+      "DelegationSettingsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "override": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override"
+          },
+          "effective": {
+            "additionalProperties": true,
+            "title": "Effective",
+            "type": "object"
+          },
+          "defaults": {
+            "additionalProperties": true,
+            "title": "Defaults",
+            "type": "object"
+          },
+          "available_backends": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Available Backends",
+            "type": "array"
+          },
+          "pending_schema": {
+            "default": false,
+            "title": "Pending Schema",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "override",
+          "effective",
+          "defaults",
+          "available_backends"
+        ],
+        "title": "DelegationSettingsResult",
         "type": "object"
       },
       "DelegationStatusResult": {
@@ -37730,6 +37852,19 @@
             "default": null,
             "title": "Profile"
           },
+          "delegation_override": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Delegation Override"
+          },
           "cols": {
             "anyOf": [
               {
@@ -49879,6 +50014,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CronSubmitResult"
+        }
+      }
+    },
+    {
+      "name": "delegation.settings",
+      "summary": "Read defaults or read/replace one chat's durable subagent settings. Existing children keep their policy.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DelegationSettingsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DelegationSettingsResult"
         }
       }
     },

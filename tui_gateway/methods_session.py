@@ -275,52 +275,6 @@ def _persist_branch(db, new_key: str, parent_key: str, title: str, history: list
         raise
 
 
-def _seed_branch_row(record: dict, key: str, parent_session_id: str, history: list, source: str, profile_home):
-    """Persist a seeded desktop branch child NOW (the one session.create exception to lazy rows): the
-    renderer's post-create resume re-fetches it via REST/defer_history, so an unpersisted child 404s and
-    the fail-latch spins forever. Best-effort — on failure the lazy first-prompt path is the fallback."""
-    try:
-        with _session_db(record) as db:
-            if db is None:
-                return
-            _persist_branch(db, key, parent_session_id, _branch_title(db, parent_session_id), history,
-                            source=source, cwd=None if _is_remote_launch_cwd(record) else record["cwd"],
-                            profile_name=profile_name_for_home(profile_home) or _current_profile_name(),
-                            model=_session_default_route(record)[0], compensate=True, title_source="derived", user_id=_session_auth_user_id(record))
-            record["pending_title"] = None
-            # The first submit's _persist_branch_seed is the fallback for a failed seed, not a second copy.
-            record["_branch_seed_persisted"] = True
-    except Exception:
-        logger.warning("seeded-branch persistence failed for %s; falling back to lazy row creation", key,
-                       exc_info=True)
-
-
-def _seed_row(record: dict) -> None:
-    """Persist a parentless seeded session NOW, for the reason ``_seed_branch_row`` gives: seeded content is
-    intent, not an abandoned draft, and the renderer's post-create hydration reads the DB. The client's title
-    lands with the row so a restart before the first prompt keeps it. Best-effort — the first-prompt path is
-    the fallback, and it re-copies the WHOLE seed, so a partial copy is rolled back here (the compensation
-    ``_persist_branch`` applies to branch children) rather than left to be duplicated."""
-    key = record.get("session_key")
-    try:
-        if _ensure_session_db_row(record) is False:
-            return
-        _persist_branch_seed(record)
-    except Exception:
-        logger.warning("seeded-session persistence failed for %s; falling back to lazy row creation", key, exc_info=True)
-    if not record.get("_branch_seed_persisted"):
-        with contextlib.suppress(Exception), _session_db(record) as db:
-            if db is not None:
-                db.discard_unadmitted_session(key)
-        return
-    try:
-        if title := record.get("pending_title"):
-            with _session_db(record) as db:
-                if db is not None and db.set_session_title(key, title):
-                    record["pending_title"] = None
-    except Exception:
-        logger.debug("seeded-session title write failed for %s; pending_title stays queued", key, exc_info=True)
-
 
 def _create_session(rid, params: dict, *, copy_parent_history: bool = False) -> dict:
     """``session.create``; ``copy_parent_history`` (``session.branch_stored``) reads the parent's
@@ -405,9 +359,16 @@ def _create_session(rid, params: dict, *, copy_parent_history: bool = False) -> 
         with _profile_build_scope(profile_home):
             profile_model, profile_provider = _config_model_target()
         composer_override_profile = {"model": profile_model, "provider": profile_provider}
+    from gateway.session_delegation_settings import creation_settings
+    try:
+        with _profile_build_scope(profile_home):
+            subagent_settings = creation_settings(params, _load_cfg())
+    except ValueError as exc:
+        return _err(rid, 4000, str(exc))
     now = time.time()
     with _sessions_lock:
         _sessions[sid] = {
+            "delegation_settings": subagent_settings,
             "agent": None, "agent_error": None, "agent_ready": threading.Event(), "attached_images": [],
             "close_on_disconnect": _flag(params, "close_on_disconnect"),
             "active_session_lease": None,  # claimed lazily on the first turn (_ensure_active_session_slot)

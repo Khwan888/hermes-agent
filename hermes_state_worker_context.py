@@ -10,7 +10,8 @@ from hermes_state_runtime import RuntimeStoreError
 # model_config sidecars a worker may patch: every key the agent persists via
 # ``patch_session_model_config`` (``_anthropic_rejected_thinking``: main's rejected-signature
 # fingerprints, agent/anthropic_thinking_replay.py) or a compaction ``model_config_patch``.
-SIDECAR_KEYS = frozenset({'_usage_anchor', '_proactive_prune_rearm_tokens', '_anthropic_rejected_thinking'})
+SIDECAR_KEYS = frozenset({'_usage_anchor', '_proactive_prune_rearm_tokens', '_anthropic_rejected_thinking',
+                          '_delegation_settings'})
 
 
 def worker_context(db, conn, session_id, payload):
@@ -46,7 +47,7 @@ def worker_sidecars(db, conn, session_id, payload):
 
 def worker_tool_names(db, conn, session_id, payload):
     """The tools[] pin, same contract as ``SessionDB.update_session_tool_names``: any JSON pin
-    (``{"version", "tools"[, "delegation_backend"]}`` today; a legacy name list) content-addressed through ``system_prompts``,
+    (version, tools and optional delegation backend/policy; a legacy name list) content-addressed through ``system_prompts``,
     ``None`` clears. Bounded so a worker cannot write an unbounded blob into the shared table."""
     if set(payload) != {'tool_names'}:
         raise RuntimeStoreError('invalid_params')
@@ -58,9 +59,10 @@ def worker_tool_names(db, conn, session_id, payload):
             raise RuntimeStoreError('invalid_params')
         # ``delegation_backend``: the backend the pinned delegate_task was built from (agent/delegation_backends.py).
         backend = pin.get('delegation_backend', '') if isinstance(pin, dict) else ''
-        if isinstance(pin, dict) and (not {'version', 'tools'} <= set(pin) <= {'version', 'tools', 'delegation_backend'}
+        if isinstance(pin, dict) and (not {'version', 'tools'} <= set(pin) <= {'version', 'tools', 'delegation_backend', 'delegation_config'}
                                       or not isinstance(pin['version'], str) or not isinstance(pin['tools'], list)
-                                      or not isinstance(backend, str) or len(backend) > 64):
+                                      or not isinstance(backend, str) or len(backend) > 64
+                                      or ('delegation_config' in pin and not isinstance(pin['delegation_config'], dict))):
             raise RuntimeStoreError('invalid_params')
     encoded = None if pin is None else json.dumps(pin)
     if encoded is not None and len(encoded) > 4 * 1024 * 1024:

@@ -17,7 +17,7 @@ CREATE_FIELDS = frozenset({'request_id', 'source', 'cwd', 'model', 'toolsets',
                            'yolo', 'safe_mode', 'ignore_user_config',
                            'skills', 'checkpoints', 'accept_hooks', 'pass_session_id', 'follow_profile_config',
                            'service_tier', 'cwd_explicit', 'run_budget', 'verbose', 'row_cwd', 'client_env',
-                           'client'})
+                           'client', 'delegation_override'})
 # Sections a ``follow_profile_config`` session re-reads from the owning profile's CURRENT config each
 # turn (main's Bot Chat row), credentials included: a frozen key never crosses a profile route change.
 FOLLOW_SECTIONS = ('model', 'providers', 'custom_providers', 'fallback_providers', 'fallback_model', 'model_aliases',
@@ -464,6 +464,11 @@ def build_policy(params, config, *, private_secrets=None, profile_terminal=True,
         # supersedes it. Without it the first turn's followed route replaces the pick.
         config.setdefault('model', {})['selection_profile'] = list(profile_target(config))
     _apply_launch_overrides(params, config)
+    from gateway.session_delegation_settings import creation_settings
+    try:
+        config["_delegation_settings"] = creation_settings(params, config, ignore_user_config=ignore_user_config)
+    except ValueError as exc:
+        _refuse("delegation_override", str(exc))
     # The posture is opt-in (``session.create`` only) and needs a folder the client named: the daemon's own
     # directory (the fallback above) is no workspace, and ``tool`` is a third-party integration. An explicit
     # pick wins anyway; skipping it here also spares the probe.

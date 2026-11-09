@@ -30,8 +30,10 @@ DEFAULT_CHILD_TIMEOUT: Optional[float] = None
 
 def _cfg() -> dict:
     """The ``delegation`` section, read through the origin so tests can patch it."""
+    from agent.delegation_settings import current_settings
     from tools.delegate_tool import _load_config
-    return _load_config()
+    scoped = current_settings()
+    return scoped if scoped is not None else _load_config()
 
 
 # ── Subagent approval callbacks ─────────────────────────────────────────────
@@ -499,6 +501,9 @@ def _load_config() -> dict:
     (follows HERMES_HOME/profile; no deepcopy, since this runs on every get_definitions() rebuild) over the legacy
     ``cli.CLI_CONFIG``, which can hide user-set keys — except that ``HERMES_IGNORE_USER_CONFIG=1`` is only honored
     by the legacy loader, so it stays authoritative when that flag is set."""
+    from agent.delegation_settings import current_settings
+    if (scoped := current_settings()) is not None:
+        return scoped
     if os.environ.get("HERMES_IGNORE_USER_CONFIG") != "1":
         try:
             from hermes_cli.config import load_config_readonly
