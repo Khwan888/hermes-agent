@@ -3,6 +3,7 @@ import { arMemoryLayers } from './ar_memory_layers'
 import { arUpdateChannel } from './ar_update_channel'
 import type { TranslationOverrides } from './define-locale'
 import { subagentPresetsCopy } from './subagent-presets'
+import { subagentSettingsCopy } from './subagent-settings'
 
 export const arSettings = {
   language: {
@@ -928,7 +929,8 @@ export const arSettings = {
         catalogFailed: 'كتالوج النماذج غير متاح. أدخل الموفّر والنموذج يدويًا أو أعد المحاولة.',
         draftHint: 'تبقى التغييرات محلية حتى تطبيقها.',
         routing: arDelegationRouting,
-        presets: subagentPresetsCopy.ar
+        presets: subagentPresetsCopy.ar,
+        quick: subagentSettingsCopy.ar
       }
     },
     providers: {

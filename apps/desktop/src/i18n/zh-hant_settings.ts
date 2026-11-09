@@ -2,6 +2,7 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import type { TranslationOverrides } from './define-locale'
 import { subagentPresetsCopy } from './subagent-presets'
+import { subagentSettingsCopy } from './subagent-settings'
 import { zhHantDelegationRouting } from './zh-hant_delegation_routing'
 import { zhHantMemoryLayers } from './zh-hant_memory_layers'
 import { zhHantUpdateChannel } from './zh-hant_update_channel'
@@ -1170,7 +1171,8 @@ export const zhHantSettings = {
         catalogFailed: '模型目錄無法使用。請手動輸入提供方與模型，或重試。',
         draftHint: '套用前，變更只保留在本機。',
         routing: zhHantDelegationRouting,
-        presets: subagentPresetsCopy['zh-hant']
+        presets: subagentPresetsCopy['zh-hant'],
+        quick: subagentSettingsCopy['zh-hant']
       }
     },
     localModels: {

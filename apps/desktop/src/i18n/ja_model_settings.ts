@@ -3,6 +3,7 @@ import type { TranslationOverride } from '@hermes/shared/i18n'
 import { jaAuxTasks } from './ja_aux_tasks'
 import { jaDelegationRouting } from './ja_delegation_routing'
 import { subagentPresetsCopy } from './subagent-presets'
+import { subagentSettingsCopy } from './subagent-settings'
 import type { ModelSettingsTranslations } from './types_model_settings'
 
 export const jaModelSettings: TranslationOverride<ModelSettingsTranslations> = {
@@ -72,6 +73,7 @@ export const jaModelSettings: TranslationOverride<ModelSettingsTranslations> = {
     catalogFailed: 'モデルカタログを取得できません。プロバイダーとモデルを手動で入力するか、再試行してください。',
     draftHint: '適用するまで変更はローカルにのみ保持されます。',
     routing: jaDelegationRouting,
-    presets: subagentPresetsCopy.ja
+    presets: subagentPresetsCopy.ja,
+    quick: subagentSettingsCopy.ja
   }
 }

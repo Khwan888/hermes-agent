@@ -1,4 +1,5 @@
 import type { SubagentPresetsCopy } from './subagent-presets'
+import type { SubagentSettingsCopy } from './subagent-settings'
 import type { AuxTaskCopyMap } from './types_aux_tasks'
 import type { DelegationRoutingTranslations } from './types_delegation_routing'
 
@@ -77,5 +78,7 @@ export interface ModelSettingsTranslations {
     routing: DelegationRoutingTranslations
     /** The profile's named subagent presets, below the routing section. */
     presets: SubagentPresetsCopy
+    /** The typing-bar model menu's per-chat Subagents entry and editor. */
+    quick: SubagentSettingsCopy
   }
 }

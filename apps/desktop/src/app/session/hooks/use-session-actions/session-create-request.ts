@@ -1,4 +1,5 @@
-import { requestGatewayForAgent } from '@/store/gateway'
+import { clearSubagentDraft, subagentDraftParams } from '@/app/chat/composer/subagent-settings-data'
+import { activeGatewayConnectionId, requestGatewayForAgent } from '@/store/gateway'
 import {
   $activeGatewayProfile,
   $newChatProfile,
@@ -76,7 +77,17 @@ export async function createGatewaySession(
     }
   }
 
-  return create(params)
+  const result = await create(params)
+
+  if (params.delegation_override) {
+    clearSubagentDraft(
+      route?.connectionId ?? activeGatewayConnectionId(),
+      route?.profile ?? String(params.profile ?? 'default'),
+      params
+    )
+  }
+
+  return result
 }
 
 // `session.create` params from the current profile + sticky-UI model/effort/fast,
@@ -122,6 +133,10 @@ export async function desktopSessionCreateParams(
     $newChatProfile.get() ||
     normalizeProfileKey($activeGatewayProfile.get())
 
+  const subagentSelection = includeComposerSelection
+    ? subagentDraftParams(capturedRoute?.connectionId ?? activeGatewayConnectionId(), profile)
+    : {}
+
   if (capturedRoute) {
     await ensureGatewayAgent(capturedRoute.connectionId, profile)
   } else if (legacyProfileIntent) {
@@ -131,6 +146,7 @@ export async function desktopSessionCreateParams(
   }
 
   return {
+    ...subagentSelection,
     cols: 96,
     source: 'desktop',
     ...(cwd && { cwd }),

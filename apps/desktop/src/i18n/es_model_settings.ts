@@ -3,6 +3,7 @@ import type { TranslationOverride } from '@hermes/shared/i18n'
 import { esAuxTasks } from './es_aux_tasks'
 import { esDelegationRouting } from './es_delegation_routing'
 import { subagentPresetsCopy } from './subagent-presets'
+import { subagentSettingsCopy } from './subagent-settings'
 import type { ModelSettingsTranslations } from './types_model_settings'
 
 export const esModelSettings: TranslationOverride<ModelSettingsTranslations> = {
@@ -85,6 +86,7 @@ export const esModelSettings: TranslationOverride<ModelSettingsTranslations> = {
     catalogFailed: 'Catálogo de modelos no disponible. Introduce un proveedor y un modelo manualmente, o reintenta.',
     draftHint: 'Los cambios se quedan en local hasta que los apliques.',
     routing: esDelegationRouting,
-    presets: subagentPresetsCopy.es
+    presets: subagentPresetsCopy.es,
+    quick: subagentSettingsCopy.es
   }
 }

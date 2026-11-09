@@ -21,6 +21,7 @@ import { useComposerModelPillLabel } from './contrib'
 import { onComposerModelMenuRequest } from './focus'
 import { RICH_INPUT_SLOT } from './rich-editor'
 import { useComposerScope } from './scope'
+import { SubagentSettingsDialogHost, SubagentSettingsMarker } from './subagent-settings'
 import type { ChatBarState } from './types'
 
 // `shrink` (not `shrink-0`) with a truncating label: the pill is the one
@@ -148,6 +149,7 @@ export function ModelPill({
       ) : (
         <GlyphSpinner className="opacity-50" spinner="braille" />
       )}
+      <SubagentSettingsMarker />
       {pinnedOverride && (
         <span
           aria-label={copy.modelPinned}
@@ -206,6 +208,7 @@ export function ModelPill({
 
   return (
     <DropdownMenu onOpenChange={setMenuOpen} open={open}>
+      <SubagentSettingsDialogHost />
       <Tip label={title} side="top">
         <DropdownMenuTrigger asChild>
           <Button

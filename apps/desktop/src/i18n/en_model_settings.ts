@@ -1,6 +1,7 @@
 import { enAuxTasks } from './en_aux_tasks'
 import { enDelegationRouting } from './en_delegation_routing'
 import { subagentPresetsCopy } from './subagent-presets'
+import { subagentSettingsCopy } from './subagent-settings'
 import type { ModelSettingsTranslations } from './types_model_settings'
 
 export const enModelSettings: ModelSettingsTranslations = {
@@ -77,6 +78,7 @@ export const enModelSettings: ModelSettingsTranslations = {
     catalogFailed: 'Model catalog unavailable. Enter a provider and model manually, or retry.',
     draftHint: 'Changes stay local until applied.',
     routing: enDelegationRouting,
-    presets: subagentPresetsCopy.en
+    presets: subagentPresetsCopy.en,
+    quick: subagentSettingsCopy.en
   }
 }

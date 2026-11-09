@@ -7,6 +7,8 @@ vi.mock('@/store/gateway', () => ({
   requestGatewayForAgent: (...args: unknown[]) => requestGatewayForAgent(...args)
 }))
 
+import { setSubagentDraft, subagentDraftParams } from '@/app/chat/composer/subagent-settings-data'
+
 import { createGatewaySession } from './session-create-request'
 
 // Verbatim admission rejections from older backends (tui_gateway/contracts/registry.py).
@@ -61,6 +63,22 @@ describe('createGatewaySession', () => {
 
     await expect(createGatewaySession(null, tiered, requestGateway)).resolves.toEqual({ session_id: 's3' })
     expect(requestGateway.mock.calls.map(call => call[1])).toEqual([tiered, { ...legacy, cwd_explicit: true }, legacy])
+  })
+
+  it('ships a frozen subagent selection on first create and clears it only after success', async () => {
+    const override = { model: 'subagent-b', max_spawn_depth: 1 }
+    setSubagentDraft('cloud', 'default', { override, preset_name: 'fast-team' })
+    const sent = { ...params, ...subagentDraftParams('cloud', 'default') }
+    requestGatewayForAgent.mockRejectedValueOnce(new Error('offline'))
+    await expect(createGatewaySession(route, sent, vi.fn())).rejects.toThrow('offline')
+    expect(subagentDraftParams('cloud', 'default')).toEqual({
+      delegation_override: override,
+      delegation_preset: 'fast-team'
+    })
+    requestGatewayForAgent.mockResolvedValueOnce({ session_id: 'first-chat' })
+    await createGatewaySession(route, sent, vi.fn())
+    expect(requestGatewayForAgent.mock.calls[1][3]).toEqual(sent)
+    expect(subagentDraftParams('cloud', 'default')).toEqual({})
   })
 
   it('never resends on any other failure, even one that mentions the field', async () => {

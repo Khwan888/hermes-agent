@@ -292,7 +292,11 @@ The **microphone** is dictation; hover it and the other voice toggles fan out ab
 
 #### Subagent models and limits
 
-Open **Settings → Model → Subagents** to choose a delegated agent's provider and model and adjust its turn limit, concurrency, timeout, and reasoning effort. Provider and model dropdowns have separate labeled rows, with controls aligned to the right on wide windows and stacked below their labels on narrow windows. The catalog and saved changes belong to the profile selected under **Applies to**.
+Open **Settings → Model → Subagents** to choose a delegated agent's provider and model and adjust its turn limit, concurrency, timeout, and reasoning effort. Provider and model dropdowns have separate labeled rows, with controls aligned to the right on wide windows and stacked below their labels on narrow windows. The catalog and saved changes belong to the profile selected under **Applies to**. These are defaults for new chats; an existing chat keeps the subagent settings it captured until you change that chat.
+
+For one chat only, open the typing bar's model picker → **Subagents**. The editor sets the route mode, the subagent provider, model and effort (or the default named route), nesting depth and the number of subagents at once. **Apply to this chat** changes only this chat; **Reset to profile default** returns it to the profile's current defaults. Subagents that are already running keep their settings. A route-mode or route-name change made while a turn is running waits for the next turn, and the editor says so. In a new chat, the choice is sent with its first message.
+
+When the profile has saved subagent presets, **Subagents** opens a small submenu: **Edit for this chat…** and the presets. Picking a preset copies it into the chat, so renaming or deleting it later does not change that chat. **Save current as preset** in the editor adds one; rename, delete and the default for new chats stay in Settings. A chat on profile defaults keeps the model pill unchanged; a chat with different subagent settings shows one small subagent marker (with the preset name, if any). On an older backend without per-chat subagent settings, the **Subagents** row is not shown.
 
 Provider and model changes remain a local draft until you click **Apply**. **Cancel**, leaving the page, or changing the settings profile discards an unapplied route. A provider switch requires a model; select **Use parent model** explicitly for a provider-only override, and make sure that provider supports the parent's model.
 

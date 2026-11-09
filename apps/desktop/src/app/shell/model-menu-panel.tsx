@@ -1,8 +1,9 @@
 import type { ModelOptionsResult } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
+import { SubagentSettingsMenuRow } from '@/app/chat/composer/subagent-settings'
 import { useSessionView } from '@/app/chat/session-view'
 import { Codicon } from '@/components/ui/codicon'
 import { DropdownMenuItem, dropdownMenuRow } from '@/components/ui/dropdown-menu'
@@ -36,6 +37,13 @@ export function ModelMenuPanel({ onFollowDefaultModel, ...props }: ModelMenuPane
   const view = useSessionView()
   const modelSource = useStore($currentModelSource)
   const { activeSessionId, controller } = useModelMenuController(props)
+
+  const subagentRequest = useCallback(
+    <T,>(method: string, params?: Record<string, unknown>) =>
+      gateway ? gateway.request<T>(method, params) : requestGateway<T>(method, params),
+    [gateway, requestGateway]
+  )
+
   // Same condition as the pill's pin dot: a draft whose next session.create
   // ships the manual pick instead of the Settings default (#107410).
   const pinnedDraft = view.kind === 'primary' && !activeSessionId && modelSource === 'manual'
@@ -79,6 +87,12 @@ export function ModelMenuPanel({ onFollowDefaultModel, ...props }: ModelMenuPane
       controller={controller}
       footer={
         <>
+          <SubagentSettingsMenuRow
+            connectionId={ownerConnectionId}
+            profile={profile}
+            request={subagentRequest}
+            sessionId={activeSessionId}
+          />
           {pinnedDraft && onFollowDefaultModel && (
             <DropdownMenuItem
               className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)')}
