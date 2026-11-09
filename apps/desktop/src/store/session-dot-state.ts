@@ -148,6 +148,11 @@ export const $sessionDotStateById = computed(
     // Draft is weakest of all: it says only "no turn has happened here yet", so
     // the first thing that does happen speaks over it.
     claim(draft, 'draft')
+    // Background work can outlive a finished reply. Keep its claim weaker than
+    // unread so the reply stays visible until acknowledged; active turns and
+    // blocking prompts still take precedence below.
+    claim(background, 'background')
+    claim(delegating, 'background')
     claim(unread, 'unread')
 
     // Persisted read state (backend watermark): a row marked unread keeps the
@@ -176,12 +181,6 @@ export const $sessionDotStateById = computed(
 
     claim(persistedUnread, 'unread')
 
-    claim(background, 'background')
-    // Async delegation: the parent turn has ended but its subagents are still
-    // running, so the session's work continues in child sessions. Same visual
-    // claim as background processes — and it yields to `working` below the
-    // moment the parent turn itself is live (synchronous orchestrator children).
-    claim(delegating, 'background')
     // A queue paused behind a turn lost in a restart waits on the user's Discard, and a turn that
     // never finished must not read as finished-unread. A turn actually running speaks over it.
     claim(paused, 'needs-input')
